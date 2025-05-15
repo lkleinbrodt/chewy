@@ -1,5 +1,7 @@
 import axios, { AxiosError } from "axios";
 
+import { toast } from "@/hooks/use-toast";
+
 export type ApiErrorType =
   | "validation"
   | "auth"
@@ -75,6 +77,48 @@ export const handleApiError = (error: unknown): ApiErrorResponse => {
 };
 
 /**
+ * Handles API errors, displays toast notification, and returns a standardized error response
+ * @param error The error object
+ * @param operation Optional operation name to include in the toast title
+ * @returns ApiErrorResponse object
+ */
+export const handleApiErrorWithToast = (
+  error: unknown,
+  operation?: string
+): ApiErrorResponse => {
+  const apiError = handleApiError(error);
+
+  const title = operation
+    ? `Error ${operation}`
+    : getErrorTypeTitle(apiError.type);
+
+  toast({
+    title,
+    description: apiError.message,
+  });
+
+  return apiError;
+};
+
+/**
+ * Get a human-readable title based on error type
+ */
+const getErrorTypeTitle = (type: ApiErrorType): string => {
+  switch (type) {
+    case "validation":
+      return "Validation Error";
+    case "auth":
+      return "Authentication Error";
+    case "server":
+      return "Server Error";
+    case "network":
+      return "Network Error";
+    default:
+      return "Error";
+  }
+};
+
+/**
  * Extracts form field errors from an API error response
  */
 export const getFormErrors = (
@@ -116,18 +160,37 @@ export const formatValidationErrors = (
 
 /**
  * Generic error handler for async functions
+ * @param asyncFn The async function to execute
+ * @param options Configuration options
+ * @returns The result of the async function or null if an error occurred
  */
 export const withErrorHandling = async <T>(
   asyncFn: () => Promise<T>,
-  onError?: (error: ApiErrorResponse) => void
+  options?: {
+    onError?: (error: ApiErrorResponse) => void;
+    showToast?: boolean;
+    operationName?: string;
+  }
 ): Promise<T | null> => {
   try {
     return await asyncFn();
   } catch (error) {
     const apiError = handleApiError(error);
 
-    if (onError) {
-      onError(apiError);
+    // Show toast notification if requested
+    if (options?.showToast !== false) {
+      const title = options?.operationName
+        ? `Error ${options.operationName}`
+        : getErrorTypeTitle(apiError.type);
+
+      toast({
+        title,
+        description: apiError.message,
+      });
+    }
+
+    if (options?.onError) {
+      options.onError(apiError);
     } else {
       console.error(apiError.message);
     }

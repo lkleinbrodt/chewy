@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import type { CalendarEvent } from "@/types/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { format } from "date-fns";
+import { dateUtils } from "@/utils/dateUtils";
 import { formatEventTime } from "@/utils/calendarUtils";
 import { useState } from "react";
 
@@ -27,16 +27,22 @@ interface EventDetailsProps {
 const EventDetails = ({ event, onClose, onUpdate }: EventDetailsProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [subject, setSubject] = useState(event.subject);
+
+  const eventStartDate = dateUtils.parseUtcISOString(event.start);
+  const eventEndDate = dateUtils.parseUtcISOString(event.end);
+
   const [startDate, setStartDate] = useState(
-    format(new Date(event.start), "yyyy-MM-dd")
+    dateUtils.formatToLocalDate(eventStartDate, "yyyy-MM-dd")
   );
   const [startTime, setStartTime] = useState(
-    format(new Date(event.start), "HH:mm")
+    dateUtils.formatToLocalTime(eventStartDate, "HH:mm")
   );
   const [endDate, setEndDate] = useState(
-    format(new Date(event.end), "yyyy-MM-dd")
+    dateUtils.formatToLocalDate(eventEndDate, "yyyy-MM-dd")
   );
-  const [endTime, setEndTime] = useState(format(new Date(event.end), "HH:mm"));
+  const [endTime, setEndTime] = useState(
+    dateUtils.formatToLocalTime(eventEndDate, "HH:mm")
+  );
   const [isSaving, setIsSaving] = useState(false);
 
   const { startFormatted, endFormatted, duration } = formatEventTime(
@@ -50,9 +56,13 @@ const EventDetails = ({ event, onClose, onUpdate }: EventDetailsProps) => {
 
     setIsSaving(true);
 
-    // Create date objects from form fields
-    const start = new Date(`${startDate}T${startTime}`);
-    const end = new Date(`${endDate}T${endTime}`);
+    // Create date objects from form inputs
+    const startDateTimeString = `${startDate}T${startTime}`;
+    const endDateTimeString = `${endDate}T${endTime}`;
+
+    // Create Date objects interpreted as local time
+    const start = new Date(startDateTimeString);
+    const end = new Date(endDateTimeString);
 
     const success = await onUpdate(event.id, {
       subject,

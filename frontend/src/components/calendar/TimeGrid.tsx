@@ -17,21 +17,19 @@ const TimeGrid = ({
 
   return (
     <div className="w-16 relative border-r pr-2 text-right">
-      {/* Empty slot for header alignment */}
-      <div className="h-12 flex items-end justify-end mb-1">
-        <span className="text-xs text-muted-foreground mr-1">GMT</span>
-      </div>
+      {/* Empty space for day header alignment */}
+      <div className="h-12 border-b"></div>
 
-      {/* Hour labels */}
-      {hours.map((hour) => (
-        <div
-          key={hour}
-          className="h-12 flex items-start justify-end"
-          style={{ height: "3rem" }}
-        >
-          <span className="text-xs text-muted-foreground">{hour}:00</span>
-        </div>
-      ))}
+      {/* Hour labels - positioned to align with the top of each hour slot */}
+      <div className="relative h-[calc(100%-3rem)]">
+        {hours.map((hour) => (
+          <div key={hour} className="h-16 flex items-start justify-end">
+            <span className="text-xs text-muted-foreground mt-0 pt-0">
+              {hour}:00
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

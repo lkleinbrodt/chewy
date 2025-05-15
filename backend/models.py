@@ -31,7 +31,14 @@ class Task(db.Model):
     is_active = db.Column(db.Boolean, default=True)
 
     def __repr__(self):
-        return f"<Task {self.id}: {self.content}>"
+        s = f"<Task {self.id}: {self.content}."
+        if self.due_by:
+            s += f" Due by: {self.due_by}"
+        if self.recurrence:
+            s += f" Recurrence: {self.recurrence}"
+        if self.time_window_start:
+            s += f" Time window: {self.time_window_start} to {self.time_window_end}"
+        return s
 
 
 class TaskDependency(db.Model):
@@ -93,7 +100,7 @@ class ScheduledTask(db.Model):
     )
 
     def __repr__(self):
-        return f"<ScheduledTask {self.id}: for task {self.task_id}>"
+        return f"<ScheduledTask {self.id}: for task {self.task_id}. From {self.start} to {self.end}>"
 
 
 # class User(db.Model):

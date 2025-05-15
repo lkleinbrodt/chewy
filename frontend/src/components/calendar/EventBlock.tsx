@@ -1,5 +1,7 @@
+import { Card, CardContent } from "@/components/ui/card";
 import { formatEventTime, getEventTypeStyles } from "@/utils/calendarUtils";
 
+import { Badge } from "@/components/ui/badge";
 import type { CalendarEvent } from "@/types/calendar";
 import { cn } from "@/lib/utils";
 
@@ -18,9 +20,9 @@ const EventBlock = ({ event, onClick, style, className }: EventBlockProps) => {
   );
 
   return (
-    <div
+    <Card
       className={cn(
-        "absolute w-[calc(100%-8px)] overflow-hidden rounded shadow-sm cursor-pointer px-2 py-1 text-xs",
+        "absolute w-[calc(100%-8px)] overflow-hidden cursor-pointer shadow-sm rounded-sm pointer-events-auto",
         className
       )}
       style={{
@@ -29,16 +31,18 @@ const EventBlock = ({ event, onClick, style, className }: EventBlockProps) => {
       }}
       onClick={() => onClick(event)}
     >
-      <div className="font-semibold truncate">{event.subject}</div>
-      <div className="truncate">
-        {startFormatted} - {endFormatted}
-        {event.is_chewy_managed && (
-          <span className="ml-1 inline-block px-1 py-0.5 text-[10px] rounded-full bg-indigo-100 text-indigo-800">
-            Chewy
-          </span>
-        )}
-      </div>
-    </div>
+      <CardContent className="px-2 py-1 text-xs text-left">
+        <div className="font-semibold truncate text-left">{event.subject}</div>
+        <div className="truncate text-left">
+          {startFormatted} - {endFormatted}
+          {event.is_chewy_managed && (
+            <Badge variant="secondary" className="ml-1 text-[10px] py-0.5">
+              Chewy
+            </Badge>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 

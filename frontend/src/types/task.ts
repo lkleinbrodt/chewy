@@ -20,8 +20,8 @@ export interface OneOffTask extends BaseTask {
 
 // Recurrence pattern specification
 export interface RecurrencePattern {
-  type: "daily" | "weekly" | "custom";
-  days?: string[]; // For weekly or custom recurrence, contains days of week
+  type: "daily" | "weekly";
+  days?: string[]; // For weekly recurrence, contains days of week
 }
 
 // Time window for recurring tasks
@@ -52,6 +52,7 @@ export interface TaskFormData {
 export interface OneOffTaskFormData extends TaskFormData {
   task_type: "one-off";
   due_by: Date;
+  include_time?: boolean;
   dependencies?: string[];
 }
 

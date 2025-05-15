@@ -4,6 +4,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Optional
 
+import pytz
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -45,6 +46,9 @@ class Config:
             "secret": os.environ.get("GOOGLE_CLIENT_SECRET"),
         }
     }
+    # THESE are in UTC
+    WORK_START_HOUR = 15
+    WORK_END_HOUR = 23
 
 
 class DevelopmentConfig(Config):

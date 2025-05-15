@@ -30,6 +30,7 @@ import DatePicker from "react-datepicker";
 import DependencySelector from "./DependencySelector";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { dateUtils } from "@/utils/dateUtils";
 import { useFormik } from "formik";
 import { useState } from "react";
 
@@ -45,10 +46,8 @@ const oneOffTaskSchema = Yup.object({
     .max(1440, "Task duration cannot exceed 24 hours (1440 minutes)"),
   due_by: Yup.date()
     .required("Due date is required")
-    .min(
-      new Date(new Date().setHours(0, 0, 0, 0)),
-      "Due date cannot be in the past"
-    ),
+    .min(dateUtils.getNow(), "Due date cannot be in the past"),
+  include_time: Yup.boolean(),
   dependencies: Yup.array().of(Yup.string()),
   is_completed: Yup.boolean(),
 });
@@ -64,10 +63,10 @@ const recurringTaskSchema = Yup.object({
     .max(1440, "Task duration cannot exceed 24 hours (1440 minutes)"),
   recurrence: Yup.object({
     type: Yup.string()
-      .oneOf(["daily", "weekly", "custom"])
+      .oneOf(["daily", "weekly"])
       .required("Recurrence type is required"),
     days: Yup.array().when("type", {
-      is: (value: string) => value === "custom" || value === "weekly",
+      is: "weekly",
       then: (schema) =>
         schema
           .min(1, "Select at least one day")
@@ -141,8 +140,15 @@ const TaskForm = ({
     task_type: "one-off",
     due_by:
       initialData?.task_type === "one-off"
-        ? new Date(initialData.due_by)
-        : new Date(),
+        ? dateUtils.parseUtcISOString(initialData.due_by) || dateUtils.getNow()
+        : dateUtils.getNow(),
+    include_time:
+      initialData?.task_type === "one-off"
+        ? Boolean(
+            initialData.due_by &&
+              dateUtils.parseUtcISOString(initialData.due_by)?.getHours() !== 0
+          )
+        : false,
     dependencies:
       initialData?.task_type === "one-off" ? initialData.dependencies : [],
     is_completed: initialData?.is_completed || false,
@@ -174,6 +180,7 @@ const TaskForm = ({
     validationSchema: oneOffTaskSchema,
     onSubmit: async (values) => {
       try {
+        // The formatTaskForApi function will convert the Date to ISO string
         await onSubmit(values);
         // Reset form to initial values
         oneOffFormik.resetForm({
@@ -181,7 +188,8 @@ const TaskForm = ({
             content: "",
             duration: 30,
             task_type: "one-off",
-            due_by: new Date(),
+            due_by: dateUtils.getNow(),
+            include_time: false,
             dependencies: [],
             is_completed: false,
           },
@@ -275,6 +283,28 @@ const TaskForm = ({
     return typeof current === "string" ? current : undefined;
   };
 
+  // Handle DatePicker change for one-off tasks
+  const handleDateChange = (date: Date | null) => {
+    if (date) {
+      oneOffFormik.setFieldValue("due_by", date);
+    } else {
+      oneOffFormik.setFieldValue("due_by", dateUtils.getNow());
+    }
+  };
+
+  const handleTimeToggle = (includeTime: boolean) => {
+    oneOffFormik.setFieldValue("include_time", includeTime);
+
+    // If toggling to not include time, set time to midnight
+    if (!includeTime) {
+      const currentDate = oneOffFormik.values.due_by;
+      const midnightDate = new Date(currentDate);
+      // Set to 12:01 AM local time (will be converted to UTC when sent to backend)
+      midnightDate.setHours(0, 1, 0, 0);
+      oneOffFormik.setFieldValue("due_by", midnightDate);
+    }
+  };
+
   return (
     <Dialog
       open={open}
@@ -335,18 +365,40 @@ const TaskForm = ({
                   <Label htmlFor="due_by">Due Date</Label>
                   <DatePicker
                     selected={oneOffFormik.values.due_by}
-                    onChange={(date) =>
-                      oneOffFormik.setFieldValue("due_by", date)
-                    }
+                    onChange={handleDateChange}
                     className={`w-full rounded-md border ${
                       oneOffFormik.touched.due_by && oneOffFormik.errors.due_by
                         ? "border-red-500"
                         : "border-input"
                     } bg-transparent px-3 py-2`}
-                    dateFormat="MMMM d, yyyy"
+                    dateFormat={
+                      oneOffFormik.values.include_time
+                        ? "MMMM d, yyyy h:mm aa"
+                        : "MMMM d, yyyy"
+                    }
+                    showTimeSelect={oneOffFormik.values.include_time}
+                    timeFormat="h:mm aa"
+                    timeIntervals={15}
                     placeholderText="Select due date"
                     minDate={new Date()}
                   />
+                  <div className="flex items-center mt-1 space-x-2">
+                    <Checkbox
+                      id="include-time"
+                      checked={oneOffFormik.values.include_time}
+                      onCheckedChange={(checked) =>
+                        handleTimeToggle(Boolean(checked))
+                      }
+                    />
+                    <Label htmlFor="include-time" className="text-sm">
+                      Include specific time
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {oneOffFormik.values.include_time
+                      ? "Task will be due at the exact date and time specified."
+                      : "Task will be due at 12:01 AM on the selected date."}
+                  </p>
                   {oneOffFormik.touched.due_by &&
                     oneOffFormik.errors.due_by && (
                       <p className="text-sm text-red-500">
@@ -523,8 +575,7 @@ const TaskForm = ({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="daily">Daily</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                    <SelectItem value="custom">Custom Days</SelectItem>
+                    <SelectItem value="weekly">Weekly (Select Days)</SelectItem>
                   </SelectContent>
                 </Select>
                 {recurringFormik.touched.recurrence?.type &&
@@ -535,8 +586,7 @@ const TaskForm = ({
                   )}
               </div>
 
-              {(recurringFormik.values.recurrence.type === "weekly" ||
-                recurringFormik.values.recurrence.type === "custom") && (
+              {recurringFormik.values.recurrence.type === "weekly" && (
                 <div className="space-y-2">
                   <Label>Days of Week</Label>
                   <div className="grid grid-cols-2 gap-2">
@@ -647,6 +697,10 @@ const TaskForm = ({
                       )}
                   </div>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Specify the preferred time range for this task (using your
+                  local time).
+                </p>
                 {typeof recurringFormik.errors.time_window === "string" &&
                   recurringFormik.touched.time_window && (
                     <p className="text-sm text-red-500 col-span-2 mt-1">

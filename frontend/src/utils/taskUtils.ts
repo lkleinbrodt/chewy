@@ -13,22 +13,66 @@ export const formatTaskForApi = (
   formData: OneOffTaskFormData | RecurringTaskFormData
 ) => {
   if (formData.task_type === "one-off") {
+    // Create a copy of the due_by date for manipulation
+    const dueDate = new Date(formData.due_by);
+
+    // If the user did not include a specific time, set it to 12:01 AM (already set in the form)
+    // The date is in local time, so convert to UTC for the backend
+
     return {
       content: formData.content,
       duration: Number(formData.duration),
       dependencies: formData.dependencies || [],
-      due_by: formData.due_by.toISOString(),
+      due_by: dueDate.toISOString(), // This automatically converts to UTC
       task_type: "one-off" as const,
       is_completed: formData.is_completed || false,
     };
   } else {
     // Recurring task
+    const timeWindow: { start: string | null; end: string | null } = {
+      start: null,
+      end: null,
+    };
+
+    if (formData.time_window) {
+      // Convert local time strings to UTC time strings
+      if (formData.time_window.start) {
+        const [hours, minutes] = formData.time_window.start
+          .split(":")
+          .map(Number);
+        const startDate = new Date();
+        startDate.setHours(hours, minutes, 0, 0);
+
+        // Format as HH:MM but in UTC
+        const utcHours = startDate.getUTCHours();
+        const utcMinutes = startDate.getUTCMinutes();
+        timeWindow.start = `${utcHours.toString().padStart(2, "0")}:${utcMinutes
+          .toString()
+          .padStart(2, "0")}`;
+      }
+
+      if (formData.time_window.end) {
+        const [hours, minutes] = formData.time_window.end
+          .split(":")
+          .map(Number);
+        const endDate = new Date();
+        endDate.setHours(hours, minutes, 0, 0);
+
+        // Format as HH:MM but in UTC
+        const utcHours = endDate.getUTCHours();
+        const utcMinutes = endDate.getUTCMinutes();
+        timeWindow.end = `${utcHours.toString().padStart(2, "0")}:${utcMinutes
+          .toString()
+          .padStart(2, "0")}`;
+      }
+    }
+
     return {
       content: formData.content,
       duration: Number(formData.duration),
       task_type: "recurring" as const,
       recurrence: formData.recurrence,
-      time_window: formData.time_window || { start: null, end: null },
+      time_window: timeWindow,
       is_active: formData.is_active || true,
     };
   }
@@ -49,11 +93,17 @@ export const formatTaskForForm = (
 
   if (apiData.task_type === "one-off") {
     const oneOffTask = apiData as OneOffTask;
+    const dueByDate = new Date(oneOffTask.due_by);
+    // Check if time is set to anything other than around midnight (allowing for small variations)
+    const hasSpecificTime =
+      dueByDate.getHours() !== 0 || dueByDate.getMinutes() > 5;
+
     return {
       ...commonFields,
       task_type: "one-off" as const,
       dependencies: oneOffTask.dependencies || [],
-      due_by: new Date(oneOffTask.due_by),
+      due_by: dueByDate,
+      include_time: hasSpecificTime,
       is_completed: oneOffTask.is_completed || false,
     };
   } else {
@@ -61,14 +111,49 @@ export const formatTaskForForm = (
     const recurringTask = apiData as RecurringTask;
     const { time_window } = recurringTask;
 
+    // Convert UTC time strings back to local time
+    const localTimeWindow = {
+      start: "",
+      end: "",
+    };
+
+    if (time_window) {
+      if (time_window.start) {
+        // Parse UTC time string and convert to local time
+        const [hours, minutes] = time_window.start.split(":").map(Number);
+        const date = new Date();
+        // Set hours and minutes in UTC
+        date.setUTCHours(hours, minutes, 0, 0);
+        // Get local hours and minutes
+        const localHours = date.getHours();
+        const localMinutes = date.getMinutes();
+        // Format as HH:MM
+        localTimeWindow.start = `${localHours
+          .toString()
+          .padStart(2, "0")}:${localMinutes.toString().padStart(2, "0")}`;
+      }
+
+      if (time_window.end) {
+        // Parse UTC time string and convert to local time
+        const [hours, minutes] = time_window.end.split(":").map(Number);
+        const date = new Date();
+        // Set hours and minutes in UTC
+        date.setUTCHours(hours, minutes, 0, 0);
+        // Get local hours and minutes
+        const localHours = date.getHours();
+        const localMinutes = date.getMinutes();
+        // Format as HH:MM
+        localTimeWindow.end = `${localHours
+          .toString()
+          .padStart(2, "0")}:${localMinutes.toString().padStart(2, "0")}`;
+      }
+    }
+
     return {
       ...commonFields,
       task_type: "recurring" as const,
       recurrence: recurringTask.recurrence,
-      time_window: {
-        start: time_window?.start || "",
-        end: time_window?.end || "",
-      },
+      time_window: localTimeWindow,
       is_active: recurringTask.is_active || true,
     };
   }

@@ -1,6 +1,6 @@
 import type { CalendarEvent, EventUpdateData } from "@/types/calendar";
 
-import { format } from "date-fns";
+import { dateUtils } from "@/utils/dateUtils";
 
 // Check if event is managed by Chewy
 export const isChewySentinel = (categories: string[] = []): boolean => {
@@ -35,8 +35,8 @@ export const formatEventTime = (
   const endTime = new Date(end);
 
   return {
-    startFormatted: format(startTime, "h:mm a"),
-    endFormatted: format(endTime, "h:mm a"),
+    startFormatted: dateUtils.formatToLocalTime(startTime, "h:mm a"),
+    endFormatted: dateUtils.formatToLocalTime(endTime, "h:mm a"),
     duration: (endTime.getTime() - startTime.getTime()) / (1000 * 60), // minutes
   };
 };

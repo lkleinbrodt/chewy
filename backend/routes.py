@@ -4,19 +4,10 @@ import re
 from datetime import datetime, timedelta
 
 import pytz
-from flask import Blueprint, current_app, jsonify, make_response, redirect, request
-from flask_jwt_extended import (
-    create_access_token,
-    create_refresh_token,
-    get_jwt_identity,
-    jwt_required,
-    set_refresh_cookies,
-    unset_jwt_cookies,
-)
+from flask import Blueprint, current_app, jsonify, request
 
 from backend.extensions import create_logger, db
 from backend.models import CalendarEvent, ScheduledTask, Task, TaskDependency
-from backend.src.OAuthSignIn import OAuthSignIn
 from backend.src.scheduler import generate_schedule
 
 logger = create_logger(__name__, level="DEBUG")
@@ -27,12 +18,16 @@ task_bp = Blueprint("task", __name__, url_prefix="/api/tasks")
 calendar_bp = Blueprint("calendar", __name__, url_prefix="/api/calendar")
 schedule_bp = Blueprint("schedule", __name__, url_prefix="/api/schedule")
 
-# Default timezone for the application
-LOCAL_TIMEZONE = pytz.timezone("America/Los_Angeles")
-
 
 # Helper functions
-def parse_iso_datetime(datetime_str, convert_to_local=False):
+def parse_iso_datetime(datetime_str):
+    """
+    Parse an ISO format datetime string into a naive UTC datetime object.
+    This function will consistently handle:
+    - UTC ISO strings with 'Z' suffix
+    - ISO strings with explicit timezone offsets
+    - Naive ISO strings (assuming they represent UTC times)
+    """
     if not datetime_str:
         return None
 
@@ -46,15 +41,18 @@ def parse_iso_datetime(datetime_str, convert_to_local=False):
         # Truncate to 6 decimal places which is the maximum Python's fromisoformat can handle
         datetime_str = datetime_str[:-1]
 
-    dt = datetime.fromisoformat(datetime_str.replace("Z", "+00:00"))
+    # Parse the ISO string - handling both timezone-aware and naive formats
+    if "Z" in datetime_str or "+" in datetime_str[10:] or "-" in datetime_str[10:]:
+        # String has timezone information
+        dt = datetime.fromisoformat(datetime_str.replace("Z", "+00:00"))
+    else:
+        # String is naive - assume it's UTC already
+        dt = datetime.fromisoformat(datetime_str)
+        # Make it timezone-aware as UTC for consistent handling
+        dt = pytz.utc.localize(dt)
 
-    # Convert from UTC to local timezone if requested
-    if convert_to_local and dt.tzinfo is not None:
-        dt = dt.astimezone(LOCAL_TIMEZONE)
-        # Remove timezone info for database storage, but keep the converted time
-        dt = dt.replace(tzinfo=None)
-
-    return dt
+    # Convert to UTC and make it naive for storage
+    return dt.astimezone(pytz.utc).replace(tzinfo=None)
 
 
 @base_bp.route("/")
@@ -97,12 +95,14 @@ def get_tasks():
             "duration": task.duration,
             "is_completed": task.is_completed,
             "task_type": task.task_type,
-            "created_at": task.created_at.isoformat(),
-            "updated_at": task.updated_at.isoformat(),
+            "created_at": task.created_at.isoformat() + "Z",
+            "updated_at": task.updated_at.isoformat() + "Z",
         }
 
         if task.task_type == "one-off":
-            task_data["due_by"] = task.due_by.isoformat() if task.due_by else None
+            task_data["due_by"] = (
+                (task.due_by.isoformat() + "Z") if task.due_by else None
+            )
             # Get dependencies
             dependencies = (
                 db.session.query(TaskDependency.dependency_id)
@@ -192,12 +192,12 @@ def get_task(task_id):
         "duration": task.duration,
         "is_completed": task.is_completed,
         "task_type": task.task_type,
-        "created_at": task.created_at.isoformat(),
-        "updated_at": task.updated_at.isoformat(),
+        "created_at": task.created_at.isoformat() + "Z",
+        "updated_at": task.updated_at.isoformat() + "Z",
     }
 
     if task.task_type == "one-off":
-        result["due_by"] = task.due_by.isoformat() if task.due_by else None
+        result["due_by"] = (task.due_by.isoformat() + "Z") if task.due_by else None
         # Get dependencies
         dependencies = (
             db.session.query(TaskDependency.dependency_id)
@@ -330,8 +330,8 @@ def get_calendar():
             {
                 "id": event.id,
                 "subject": event.subject,
-                "start": event.start.isoformat(),
-                "end": event.end.isoformat(),
+                "start": event.start.isoformat() + "Z",
+                "end": event.end.isoformat() + "Z",
                 "is_chewy_managed": event.is_chewy_managed,
                 "categories": event.categories,
             }
@@ -354,6 +354,7 @@ def sync_calendar():
     # Track files processed and events synced
     processed_files = []
     events_synced = 0
+    all_day_events_skipped = 0  # Track skipped all-day events
 
     # List all JSON files in the directory
     json_files = [f for f in os.listdir(calendar_dir) if f.endswith(".json")]
@@ -380,25 +381,24 @@ def sync_calendar():
                     ):
                         continue
 
+                    # Skip all-day events
+                    # TODO: Improve handling of all-day events in the future - consider adding them
+                    # with special treatment or as a different event type
+                    if event_data.get("isAllDay", False):
+                        all_day_events_skipped += 1
+                        continue
+
                     # Parse dates with timezone conversion
                     # Prioritize using the fields with timezone information
                     if "startWithTimeZone" in event_data:
-                        start_time = parse_iso_datetime(
-                            event_data["startWithTimeZone"], convert_to_local=True
-                        )
+                        start_time = parse_iso_datetime(event_data["startWithTimeZone"])
                     else:
-                        start_time = parse_iso_datetime(
-                            event_data["start"], convert_to_local=True
-                        )
+                        start_time = parse_iso_datetime(event_data["start"])
 
                     if "endWithTimeZone" in event_data:
-                        end_time = parse_iso_datetime(
-                            event_data["endWithTimeZone"], convert_to_local=True
-                        )
+                        end_time = parse_iso_datetime(event_data["endWithTimeZone"])
                     else:
-                        end_time = parse_iso_datetime(
-                            event_data["end"], convert_to_local=True
-                        )
+                        end_time = parse_iso_datetime(event_data["end"])
 
                     if not start_time or not end_time:
                         continue
@@ -458,6 +458,7 @@ def sync_calendar():
             "files_processed": processed_files,
             "events_synced": events_synced,
             "events_deleted": len(events_to_delete),
+            "all_day_events_skipped": all_day_events_skipped,
         }
     )
 
@@ -473,8 +474,8 @@ def get_all_events():
             {
                 "id": event.id,
                 "subject": event.subject,
-                "start": event.start.isoformat(),
-                "end": event.end.isoformat(),
+                "start": event.start.isoformat() + "Z",
+                "end": event.end.isoformat() + "Z",
                 "is_chewy_managed": event.is_chewy_managed,
                 "categories": event.categories,
             }
@@ -518,6 +519,18 @@ def clear_all_events():
         return jsonify({"error": f"Failed to clear events: {str(e)}"}), 500
 
 
+@schedule_bp.route("/clear", methods=["DELETE"])
+def clear_all_scheduled_tasks():
+    """Clear all scheduled tasks - for testing purposes"""
+    try:
+        ScheduledTask.query.delete()
+        db.session.commit()
+        return jsonify({"message": "All scheduled tasks cleared successfully"})
+    except Exception as e:
+        logger.error(f"Error clearing scheduled tasks: {str(e)}")
+        return jsonify({"error": f"Failed to clear tasks: {str(e)}"}), 500
+
+
 # Schedule routes
 @schedule_bp.route("/generate", methods=["POST"])
 def generate_new_schedule():
@@ -528,6 +541,14 @@ def generate_new_schedule():
     start_date = parse_iso_datetime(
         data.get("start_date", datetime.utcnow().isoformat())
     )
+    # start date cant be before right now. if it is, set it to right now
+    # Ensure both datetimes are timezone-naive for comparison
+    now = datetime.utcnow().replace(tzinfo=None)
+    if start_date.tzinfo is not None:
+        start_date = start_date.replace(tzinfo=None)
+    if start_date < now:
+        start_date = now
+
     end_date = parse_iso_datetime(
         data.get("end_date", (datetime.utcnow() + timedelta(days=7)).isoformat())
     )
@@ -542,10 +563,20 @@ def generate_new_schedule():
 
     # Generate new schedule
     try:
-        scheduled_tasks = generate_schedule(start_date, end_date)
+        scheduled_tasks, status_message = generate_schedule(start_date, end_date)
+
+        if scheduled_tasks is None:
+            return jsonify({"error": status_message}), 500
+
+        # Log the scheduled tasks with timezone info for debugging
+        logger.info(f"Scheduled tasks in UTC time: {scheduled_tasks}")
 
         # Save scheduled tasks to database
         for task_data in scheduled_tasks:
+            # this is a bit of a hack and a monkey patch b/c of the way we handle recurrences in our optimizer
+            if task_data.get("original_master_task_id"):
+                task_data["task_id"] = task_data["original_master_task_id"]
+
             scheduled_task = ScheduledTask(
                 task_id=task_data["task_id"],
                 start=task_data["start"],
@@ -556,10 +587,33 @@ def generate_new_schedule():
 
         db.session.commit()
 
+        # now return those tasks
+        scheduled_tasks = ScheduledTask.query.filter(
+            ScheduledTask.start >= start_date, ScheduledTask.start <= end_date
+        ).all()
+
+        result = []
+        for st in scheduled_tasks:
+            task = Task.query.get(st.task_id)
+            if not task:
+                continue
+
+            result.append(
+                {
+                    "id": st.id,
+                    "task_id": st.task_id,
+                    "task_content": task.content,
+                    "start": st.start.isoformat() + "Z",  # Add Z to indicate UTC time
+                    "end": st.end.isoformat() + "Z",  # Add Z to indicate UTC time
+                    "status": st.status,
+                    "duration": task.duration,
+                }
+            )
+
         return jsonify(
             {
-                "message": "Schedule generated successfully",
-                "tasks_scheduled": len(scheduled_tasks),
+                "message": "Schedule generated successfully (times in UTC)",
+                "scheduled_tasks": result,
             }
         )
     except Exception as e:
@@ -586,6 +640,23 @@ def get_schedule():
         ScheduledTask.start >= start, ScheduledTask.start <= end
     ).all()
 
+    # Log the scheduled tasks for debugging
+    formatted_scheduled_tasks = []
+    for st in scheduled_tasks:
+        task = Task.query.get(st.task_id)
+        if not task:
+            logger.warning(f"Task {st.task_id} not found")
+            logger.warning(f"Scheduled task: {st}")
+            continue
+        formatted_scheduled_tasks.append(
+            {
+                "id": st.id,
+                "task_id": st.task_id,
+                "task_content": task.content,
+            }
+        )
+    logger.info(f"Returning scheduled tasks (UTC time): {formatted_scheduled_tasks}")
+
     result = []
     for st in scheduled_tasks:
         task = Task.query.get(st.task_id)
@@ -597,8 +668,8 @@ def get_schedule():
                 "id": st.id,
                 "task_id": st.task_id,
                 "task_content": task.content,
-                "start": st.start.isoformat(),
-                "end": st.end.isoformat(),
+                "start": st.start.isoformat() + "Z",  # Add Z to indicate UTC time
+                "end": st.end.isoformat() + "Z",  # Add Z to indicate UTC time
                 "status": st.status,
                 "duration": task.duration,
             }

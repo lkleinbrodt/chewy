@@ -1,15 +1,19 @@
-import { format, isToday } from "date-fns";
+import { calculateEventPosition, dateUtils } from "@/utils/dateUtils";
 
 import type { CalendarEvent } from "@/types/calendar";
 import EventBlock from "./EventBlock";
+import type { ScheduledTask } from "@/types/schedule";
+import TaskBlock from "../calendar/TaskBlock";
 import { appConfig } from "@/constants/appConfig";
-import { calculateEventPosition } from "@/utils/dateUtils";
 import { cn } from "@/lib/utils";
+import { isToday } from "date-fns";
 
 interface DayColumnProps {
   date: Date;
   events: CalendarEvent[];
+  scheduledTasks?: ScheduledTask[];
   onEventClick: (event: CalendarEvent) => void;
+  onTaskClick?: (task: ScheduledTask) => void;
   startHour?: number;
   endHour?: number;
 }
@@ -17,7 +21,9 @@ interface DayColumnProps {
 const DayColumn = ({
   date,
   events,
+  scheduledTasks = [],
   onEventClick,
+  onTaskClick,
   startHour: propStartHour,
   endHour: propEndHour,
 }: DayColumnProps) => {
@@ -37,17 +43,29 @@ const DayColumn = ({
         <div
           key={hour}
           className={cn(
-            "h-12 border-t border-gray-200",
+            "h-16 border-t border-gray-200 relative",
             isBusinessHour ? "bg-gray-50/50" : ""
           )}
-        />
+        >
+          {/* Add a small hour indicator inside each slot for debugging/alignment */}
+          {/* <div className="absolute top-0 left-1 text-[10px] text-gray-400">
+            {hour}:00
+          </div> */}
+        </div>
       );
     }
   );
 
   // Position events within the day column
   const eventBlocks = events.map((event) => {
-    const position = calculateEventPosition(event, workStartHour, workEndHour);
+    const position = calculateEventPosition(
+      {
+        start: event.start,
+        end: event.end,
+      },
+      workStartHour,
+      workEndHour
+    );
 
     return (
       <EventBlock
@@ -59,7 +77,33 @@ const DayColumn = ({
     );
   });
 
+  // Position scheduled tasks within the day column
+  const taskBlocks = scheduledTasks.map((task) => {
+    // Calculate position using the same utility as events
+    const position = calculateEventPosition(
+      {
+        start:
+          typeof task.start === "string"
+            ? task.start
+            : task.start.toISOString(),
+        end: typeof task.end === "string" ? task.end : task.end.toISOString(),
+      },
+      workStartHour,
+      workEndHour
+    );
+
+    return (
+      <TaskBlock
+        key={task.id}
+        task={task}
+        onClick={onTaskClick}
+        style={position}
+      />
+    );
+  });
+
   const dayIsToday = isToday(date);
+  const now = dateUtils.getNow();
 
   return (
     <div className="flex-1 relative min-w-[120px]">
@@ -70,19 +114,22 @@ const DayColumn = ({
           dayIsToday ? "bg-blue-50 dark:bg-blue-900/20" : ""
         )}
       >
-        <div className="text-sm font-medium">{format(date, "EEE")}</div>
+        <div className="text-sm font-medium">
+          {dateUtils.formatToLocalDate(date, "EEE")}
+        </div>
         <div
           className={cn(
             "text-lg",
             dayIsToday ? "text-blue-600 dark:text-blue-400 font-bold" : ""
           )}
         >
-          {format(date, "d")}
+          {dateUtils.formatToLocalDate(date, "d")}
         </div>
       </div>
 
       {/* Time slots */}
       <div className="relative h-[calc(100%-3rem)] border-r">
+        {/* Time slot grid */}
         <div className="absolute inset-0">{timeSlots}</div>
 
         {/* Current time indicator */}
@@ -90,19 +137,13 @@ const DayColumn = ({
           <div
             className="absolute left-0 right-0 border-t border-red-400 z-10"
             style={{
-              top: `${Math.max(
-                0,
-                Math.min(
-                  100,
-                  (new Date().getHours() +
-                    new Date().getMinutes() / 60 -
-                    workStartHour) *
-                    (100 / (workEndHour - workStartHour))
-                )
-              )}%`,
+              top: `${
+                ((now.getHours() + now.getMinutes() / 60 - workStartHour) /
+                  (workEndHour - workStartHour)) *
+                100
+              }%`,
               display:
-                new Date().getHours() < workStartHour ||
-                new Date().getHours() >= workEndHour
+                now.getHours() < workStartHour || now.getHours() >= workEndHour
                   ? "none"
                   : "block",
             }}
@@ -112,7 +153,10 @@ const DayColumn = ({
         )}
 
         {/* Events */}
-        <div className="absolute inset-0 px-1">{eventBlocks}</div>
+        <div className="absolute inset-0 px-1">
+          {eventBlocks}
+          {taskBlocks}
+        </div>
       </div>
     </div>
   );

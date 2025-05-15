@@ -4,8 +4,9 @@ import type { CalendarEvent } from "@/types/calendar";
 import CalendarHeader from "@/components/calendar/CalendarHeader";
 import EventDetails from "@/components/calendar/EventDetails";
 import { ExclamationTriangleIcon } from "@radix-ui/react-icons";
+import type { ScheduledTask } from "@/types/schedule";
+import ScheduledTaskDetails from "@/components/tasks/ScheduledTaskDetails";
 import WeekView from "@/components/calendar/WeekView";
-import { appConfig } from "@/constants/appConfig";
 import { useCalendar } from "@/hooks/useCalendar";
 import { useState } from "react";
 
@@ -14,27 +15,40 @@ const CalendarPage = () => {
     startDate,
     endDate,
     events,
+    scheduledTasks,
     loading,
     error,
     isSyncing,
+    isGenerating,
     lastSyncTime,
     nextWeek,
     prevWeek,
     goToToday,
     syncCalendar,
+    generateSchedule,
     updateEvent,
+    updateScheduledTask,
   } = useCalendar();
 
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(
     null
   );
+  const [selectedTask, setSelectedTask] = useState<ScheduledTask | null>(null);
 
   const handleEventClick = (event: CalendarEvent) => {
     setSelectedEvent(event);
   };
 
-  const handleCloseModal = () => {
+  const handleTaskClick = (task: ScheduledTask) => {
+    setSelectedTask(task);
+  };
+
+  const handleCloseEventModal = () => {
     setSelectedEvent(null);
+  };
+
+  const handleCloseTaskModal = () => {
+    setSelectedTask(null);
   };
 
   const handleUpdateEvent = async (
@@ -57,12 +71,14 @@ const CalendarPage = () => {
         onNextWeek={nextWeek}
         onToday={goToToday}
         onSync={syncCalendar}
+        onGenerateSchedule={generateSchedule}
         isSyncing={isSyncing}
+        isGenerating={isGenerating}
         lastSyncTime={lastSyncTime}
       />
 
       {error && (
-        <Alert variant="destructive" className="my-4">
+        <Alert variant="destructive" className="my-2">
           <ExclamationTriangleIcon className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -72,16 +88,26 @@ const CalendarPage = () => {
         <WeekView
           startDate={startDate}
           events={events}
+          scheduledTasks={scheduledTasks}
           loading={loading}
           onEventClick={handleEventClick}
+          onTaskClick={handleTaskClick}
         />
       </div>
 
       {selectedEvent && (
         <EventDetails
           event={selectedEvent}
-          onClose={handleCloseModal}
+          onClose={handleCloseEventModal}
           onUpdate={handleUpdateEvent}
+        />
+      )}
+
+      {selectedTask && (
+        <ScheduledTaskDetails
+          task={selectedTask}
+          onClose={handleCloseTaskModal}
+          onUpdate={updateScheduledTask}
         />
       )}
     </div>

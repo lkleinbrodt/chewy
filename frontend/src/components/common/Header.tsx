@@ -10,12 +10,12 @@ import { Link } from "react-router-dom";
 
 const Header = () => {
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 mb-2">
-      <div className="container flex h-20 items-center">
-        <div className="mr-6 flex items-center gap-3">
+    <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 mb-1">
+      <div className="container flex h-14 items-center">
+        <div className="mr-4 flex items-center gap-2">
           <Link to="/" className="flex items-center">
-            <img src="/icons/chewy.png" alt="logo" className="w-12 h-12" />
-            <span className="ml-3 text-2xl text-primary">Chewy</span>
+            <img src="/icons/chewy.png" alt="logo" className="w-8 h-8" />
+            <span className="ml-2 text-xl text-primary">Chewy</span>
           </Link>
         </div>
 
@@ -26,7 +26,7 @@ const Header = () => {
                 asChild
                 className={
                   navigationMenuTriggerStyle() +
-                  " text-base px-6 py-3 font-medium"
+                  " text-sm px-4 py-2 font-medium"
                 }
               >
                 <Link to="/tasks">Tasks</Link>
@@ -37,7 +37,7 @@ const Header = () => {
                 asChild
                 className={
                   navigationMenuTriggerStyle() +
-                  " text-base px-6 py-3 font-medium"
+                  " text-sm px-4 py-2 font-medium"
                 }
               >
                 <Link to="/calendar">Calendar</Link>

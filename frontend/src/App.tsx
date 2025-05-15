@@ -4,18 +4,19 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import AuthPage from "@/pages/AuthPage";
 import { AuthProvider } from "./contexts/AuthContext";
-import CalendarPage from "./pages/tasks/CalendarPage";
+import CalendarPage from "./pages/CalendarPage";
 import Layout from "./components/common/Layout";
 import Login from "./pages/LoginPage";
-import TaskListPage from "./pages/tasks/TaskListPage";
-// import PrivateRoute from "./components/PrivateRoute";
+import TaskListPage from "./pages/TaskListPage";
 import { ThemeProvider } from "./components/theme-provider";
+import { Toaster } from "@/components/ui/toaster";
 
 function App() {
   return (
     <BrowserRouter>
       <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
         <AuthProvider>
+          <Toaster />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/auth" element={<AuthPage />} />

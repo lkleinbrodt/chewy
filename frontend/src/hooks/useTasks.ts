@@ -8,7 +8,7 @@ import type {
 import { useCallback, useEffect, useState } from "react";
 
 import type { ApiErrorResponse } from "@/utils/errorUtils";
-import { handleApiError } from "@/utils/errorUtils";
+import { handleApiErrorWithToast } from "@/utils/errorUtils";
 import taskService from "@/services/taskService";
 
 /**
@@ -31,7 +31,7 @@ export function useTasks(initialFilters: TaskFilters = {}) {
       const data = await taskService.getTasks(filters);
       setTasks(data);
     } catch (err) {
-      const apiError = handleApiError(err);
+      const apiError = handleApiErrorWithToast(err, "fetching tasks");
       setError(apiError);
       console.error("Error fetching tasks:", apiError.message);
     } finally {
@@ -55,7 +55,7 @@ export function useTasks(initialFilters: TaskFilters = {}) {
       fetchTasks(); // Refresh task list
       return result;
     } catch (err) {
-      const apiError = handleApiError(err);
+      const apiError = handleApiErrorWithToast(err, "creating task");
       setError(apiError);
       throw apiError;
     }
@@ -73,7 +73,7 @@ export function useTasks(initialFilters: TaskFilters = {}) {
       fetchTasks(); // Refresh task list
       return result;
     } catch (err) {
-      const apiError = handleApiError(err);
+      const apiError = handleApiErrorWithToast(err, "updating task");
       setError(apiError);
       throw apiError;
     }
@@ -88,7 +88,7 @@ export function useTasks(initialFilters: TaskFilters = {}) {
       fetchTasks(); // Refresh task list
       return result;
     } catch (err) {
-      const apiError = handleApiError(err);
+      const apiError = handleApiErrorWithToast(err, "deleting task");
       setError(apiError);
       throw apiError;
     }
@@ -103,7 +103,7 @@ export function useTasks(initialFilters: TaskFilters = {}) {
       fetchTasks(); // Refresh task list
       return result;
     } catch (err) {
-      const apiError = handleApiError(err);
+      const apiError = handleApiErrorWithToast(err, "completing task");
       setError(apiError);
       throw apiError;
     }

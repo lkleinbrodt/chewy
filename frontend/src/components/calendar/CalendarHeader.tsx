@@ -1,8 +1,9 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import SyncButton from "./SyncButton";
 import { formatDateRange } from "@/utils/dateUtils";
+import { useSchedule } from "@/hooks/useSchedule";
 
 interface CalendarHeaderProps {
   startDate: Date;
@@ -11,7 +12,9 @@ interface CalendarHeaderProps {
   onNextWeek: () => void;
   onToday: () => void;
   onSync: () => Promise<void>;
+  onGenerateSchedule: () => Promise<boolean>;
   isSyncing: boolean;
+  isGenerating: boolean;
   lastSyncTime: Date | null;
 }
 
@@ -22,13 +25,16 @@ const CalendarHeader = ({
   onNextWeek,
   onToday,
   onSync,
+  onGenerateSchedule,
   isSyncing,
+  isGenerating,
   lastSyncTime,
 }: CalendarHeaderProps) => {
   const dateRange = formatDateRange(startDate, endDate);
+  const { clearAllScheduledTasks } = useSchedule();
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b">
+    <div className="flex items-center justify-between px-4 pb-3 border-b">
       <div className="flex items-center space-x-2">
         <h1 className="text-3xl font-bold">Calendar</h1>
         <span className="mx-2 text-muted-foreground">|</span>
@@ -68,11 +74,30 @@ const CalendarHeader = ({
           </Button>
         </div>
 
+        <Button
+          onClick={onGenerateSchedule}
+          disabled={isGenerating}
+          variant="outline"
+          size="sm"
+          className="px-3 py-1 text-sm"
+        >
+          <CalendarIcon className="mr-2 h-4 w-4" />
+          Generate Schedule
+        </Button>
+
         <SyncButton
           onSync={onSync}
-          isSyncing={isSyncing}
+          isSyncing={false}
           lastSyncTime={lastSyncTime}
         />
+        <Button
+          onClick={clearAllScheduledTasks}
+          variant="outline"
+          size="sm"
+          className="px-3 py-1 text-sm"
+        >
+          Clear All Scheduled Tasks
+        </Button>
       </div>
     </div>
   );
