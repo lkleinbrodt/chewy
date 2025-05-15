@@ -640,23 +640,6 @@ def get_schedule():
         ScheduledTask.start >= start, ScheduledTask.start <= end
     ).all()
 
-    # Log the scheduled tasks for debugging
-    formatted_scheduled_tasks = []
-    for st in scheduled_tasks:
-        task = Task.query.get(st.task_id)
-        if not task:
-            logger.warning(f"Task {st.task_id} not found")
-            logger.warning(f"Scheduled task: {st}")
-            continue
-        formatted_scheduled_tasks.append(
-            {
-                "id": st.id,
-                "task_id": st.task_id,
-                "task_content": task.content,
-            }
-        )
-    logger.info(f"Returning scheduled tasks (UTC time): {formatted_scheduled_tasks}")
-
     result = []
     for st in scheduled_tasks:
         task = Task.query.get(st.task_id)
