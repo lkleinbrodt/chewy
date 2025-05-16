@@ -5,155 +5,18 @@ from ortools.sat.python import cp_model
 
 from backend.config import Config
 from backend.extensions import create_logger, db
-from backend.models import CalendarEvent, Task, TaskDependency
+from backend.models import CalendarEvent, RecurringEvent, Task, TaskDependency
+from backend.src.scheduling.or_task_wrapper import ORTaskWrapper
+from backend.src.scheduling.utils import (
+    force_infeasibility,
+    get_calendar_events,
+    get_task_dependencies,
+    get_tasks,
+    merge_overlapping_intervals,
+    reset_recurring_events,
+)
 
 logger = create_logger(__name__, level="DEBUG")
-
-
-def force_infeasibility(model, message):
-    """
-    Force a CP model to be infeasible by adding contradictory constraints.
-
-    Used when a scheduling requirement cannot be satisfied and we need to
-    explicitly make the model infeasible rather than letting it fail silently.
-
-    Args:
-        model: The CP-SAT model to make infeasible
-        message: Description of why infeasibility is being forced
-
-    Returns:
-        A boolean variable that's constrained to be both 0 and 1
-    """
-    logger.debug(f"Forcing model infeasibility: {message}")
-    false_literal = model.NewBoolVar("false_literal_for_infeasibility")
-    model.Add(false_literal == 1)  # Assert it's true
-    model.Add(false_literal == 0)  # Assert it's false - creates contradiction
-    return false_literal
-
-
-class ORTaskWrapper:
-    """
-    Wrapper for Task objects to integrate with OR-Tools constraint solver.
-
-    Converts task properties into constraint variables with appropriate domains,
-    handling task start/end times, durations, due dates, and time windows.
-    """
-
-    def __init__(self, task_obj, model, period_start_dt, period_end_dt_minutes):
-        """
-        Initialize task variables for the constraint solver.
-
-        Args:
-            task_obj: The Task DB object
-            model: OR-Tools CP model
-            period_start_dt: Start datetime of scheduling period
-            period_end_dt_minutes: End of scheduling horizon in minutes relative to period_start_dt
-        """
-        self.task_obj = task_obj
-        self.id = task_obj.id
-        self.duration_min = task_obj.duration
-        if hasattr(task_obj, "original_master_task_id"):
-            self.original_master_task_id = task_obj.original_master_task_id
-        else:
-            self.original_master_task_id = None
-
-        logger.debug(f"Creating task variables for '{task_obj.content}' ({self.id})")
-        logger.debug(f"  Duration: {self.duration_min} minutes")
-        logger.debug(f"  Horizon: {period_end_dt_minutes} minutes")
-
-        # Define domains for start and end variables relative to period_start_dt
-        min_s = 0  # Earliest possible start: beginning of period
-        max_s = (
-            period_end_dt_minutes - self.duration_min
-        )  # Latest possible start: end - duration
-
-        # Handle case where task is longer than scheduling window
-        if min_s > max_s:
-            logger.warning(
-                f"Task {self.id} is longer than scheduling window. Infeasible."
-            )
-            # Create unsatisfiable variable domain (min > max)
-            self.start_var = model.NewIntVar(1, 0, f"start_{self.id}")
-            self.end_var = model.NewIntVar(1, 0, f"end_{self.id}")
-        else:
-            self.start_var = model.NewIntVar(min_s, max_s, f"start_{self.id}")
-            self.end_var = model.NewIntVar(
-                min_s + self.duration_min, period_end_dt_minutes, f"end_{self.id}"
-            )
-
-        # Create interval variable (implicitly ensures end = start + duration)
-        self.interval_var = model.NewIntervalVar(
-            self.start_var, self.duration_min, self.end_var, f"interval_{self.id}"
-        )
-
-        # Process due date constraints
-        self.due_by_min = None
-        if task_obj.due_by:
-            if task_obj.due_by < period_start_dt:
-                # Task is due before period starts - mark as infeasible
-                logger.warning(
-                    f"Task {self.id} is due before scheduling period. Infeasible."
-                )
-                self.due_by_min = (
-                    -1
-                )  # Will conflict with end_var >= 0 domain constraint
-            else:
-                # Convert due date to minutes from period start
-                self.due_by_min = int(
-                    (task_obj.due_by - period_start_dt).total_seconds() / 60
-                )
-                logger.debug(f"  Due by: {self.due_by_min} minutes")
-
-                if self.due_by_min < self.duration_min:
-                    logger.debug("  Warning: Due time is earlier than task duration")
-        else:
-            logger.debug("  No due date constraint")
-
-        # Store time window constraints (if any)
-        self.time_window_start_time = task_obj.time_window_start  # datetime.time
-        self.time_window_end_time = task_obj.time_window_end  # datetime.time
-        self.instance_date = getattr(task_obj, "instance_date", None)  # datetime.date
-
-
-def merge_overlapping_intervals(
-    intervals: list[tuple[int, int]],
-) -> list[tuple[int, int]]:
-    """
-    Merge a list of potentially overlapping time intervals into a minimal set of disjoint intervals.
-
-    This is used to consolidate the "forbidden zones" like calendar events and non-working hours
-    into an optimal set of non-overlapping intervals to improve solver performance.
-
-    Args:
-        intervals: List of (start, end) tuples representing time intervals
-
-    Returns:
-        List of merged non-overlapping (start, end) intervals covering the same time ranges
-
-    Example:
-        Input: [(1, 5), (3, 7), (8, 10), (9, 12)]
-        Output: [(1, 7), (8, 12)]
-    """
-    if not intervals:
-        return []
-
-    # Sort intervals by start time
-    intervals.sort(key=lambda x: x[0])
-
-    merged_intervals = []
-    current_start, current_end = intervals[0]
-
-    for i in range(1, len(intervals)):
-        next_start, next_end = intervals[i]
-        if next_start <= current_end:  # Overlap or contiguous
-            current_end = max(current_end, next_end)
-        else:  # No overlap, start a new merged interval
-            merged_intervals.append((current_start, current_end))
-            current_start, current_end = next_start, next_end
-
-    # Add the last processed interval
-    merged_intervals.append((current_start, current_end))
-    return merged_intervals
 
 
 def schedule_tasks_with_or_tools(
@@ -325,16 +188,14 @@ def schedule_tasks_with_or_tools(
                 logger.warning(
                     f"Task {or_task.id} is due before the scheduling period. Infeasible."
                 )
-                force_infeasibility(model, "Task is due before the scheduling period.")
+                force_infeasibility(model)
             elif (
                 or_task.due_by_min < or_task.duration_min
             ):  # Due too early for task duration
                 logger.warning(
                     f"Task {or_task.id} due date {or_task.task_obj.due_by} is too early for its duration {or_task.duration_min}. Infeasible."
                 )
-                force_infeasibility(
-                    model, "Task due date is too early for its duration."
-                )
+                force_infeasibility(model)
             else:
                 model.Add(or_task.end_var <= or_task.due_by_min)
 
@@ -374,9 +235,7 @@ def schedule_tasks_with_or_tools(
                     logger.warning(
                         f"Task {or_task.id} instance_date {or_task.instance_date} invalid for time window. Infeasible."
                     )
-                    force_infeasibility(
-                        model, "Task instance date is invalid for time window."
-                    )
+                    force_infeasibility(model)
                     continue  # Next task
             else:  # Generic task with a daily repeating time window
                 # Check all weekdays in the period
@@ -394,9 +253,7 @@ def schedule_tasks_with_or_tools(
                 logger.warning(
                     f"Task {or_task.id} has time window, but no weekdays in scheduling period. Infeasible."
                 )
-                force_infeasibility(
-                    model, "Task has time window, but no weekdays in scheduling period."
-                )
+                force_infeasibility(model)
                 continue
 
             # For each valid day, calculate possible time windows
@@ -462,9 +319,7 @@ def schedule_tasks_with_or_tools(
                 logger.warning(
                     f"Task {or_task.id} ({or_task.task_obj.content}) has a time window but no valid slots found. Infeasible."
                 )
-                force_infeasibility(
-                    model, "Task has a time window but no valid slots found."
-                )
+                force_infeasibility(model)
                 continue
 
             # Task must be scheduled in ONE of these valid windows
@@ -502,11 +357,8 @@ def schedule_tasks_with_or_tools(
             scheduled_tasks_result.append(
                 {
                     "task_id": task_id,
-                    "content": or_task.task_obj.content,
                     "start": scheduled_start_dt,
                     "end": scheduled_end_dt,
-                    "task_type": or_task.task_obj.task_type,
-                    "original_master_task_id": or_task.original_master_task_id,
                 }
             )
 
@@ -520,156 +372,6 @@ def schedule_tasks_with_or_tools(
     else:
         logger.warning(f"Solver finished with status: {solver.StatusName(status)}")
         return None, f"Solver status: {solver.StatusName(status)}"
-
-
-def get_calendar_events(start_date, end_date):
-    """Retrieve non-Chewy-managed calendar events within the date range."""
-    return (
-        CalendarEvent.query.filter(
-            CalendarEvent.end >= start_date,
-            CalendarEvent.start <= end_date,
-            CalendarEvent.is_chewy_managed == False,
-        )
-        .order_by(CalendarEvent.start)
-        .all()
-    )
-
-
-def get_one_off_tasks(start_date):
-    """Retrieve incomplete one-off tasks due before or on the end date."""
-    return (
-        Task.query.filter(
-            Task.task_type == "one-off",
-            Task.is_completed == False,
-            # db.or_(Task.due_by >= start_date, Task.due_by == None),
-        )
-        .order_by(Task.due_by.asc().nullslast())
-        .all()
-    )
-
-
-def get_recurring_tasks():
-    """Retrieve active recurring tasks."""
-    return Task.query.filter(
-        Task.task_type == "recurring", Task.is_active == True
-    ).all()
-
-
-def expand_daily_recurring_task(task, start_date, end_date):
-    """Convert a daily recurring task into individual task instances within the date range."""
-    day_iterator = start_date.date()
-    daily_tasks = []
-    while day_iterator < end_date.date():
-        # skip weekends
-        if day_iterator.weekday() < 5:
-            effective_due_date_for_window = day_iterator
-            if task.time_window_end < task.time_window_start:
-                # overnight task
-                effective_due_date_for_window += timedelta(days=1)
-            instance_due_by = datetime.combine(
-                effective_due_date_for_window, task.time_window_end
-            )
-
-            instance_task = Task(
-                id=str(uuid.uuid4()),
-                content=task.content,
-                duration=task.duration,
-                task_type="recurring_instance",
-                due_by=instance_due_by,
-                time_window_start=task.time_window_start,
-                time_window_end=task.time_window_end,
-                is_active=True,
-            )
-            # Monkey-patch attributes needed for scheduling logic
-            # Ideally, these would be part of the Task model if you persist instances
-            # or use a dedicated scheduler-internal class.
-            instance_task.instance_date = (
-                day_iterator  # The specific date this instance is for
-            )
-            instance_task.original_master_task_id = (
-                task.id
-            )  # ID of the original Task template
-
-            daily_tasks.append(instance_task)
-        day_iterator += timedelta(days=1)
-    return daily_tasks
-
-
-def expand_weekly_recurring_task(task, start_date: datetime, end_date: datetime):
-    days = task.recurrence["days"]
-    weekdays = [
-        "monday",
-        "tuesday",
-        "wednesday",
-        "thursday",
-        "friday",
-        "saturday",
-        "sunday",
-    ]
-    # no weekends
-    days_of_week = [weekdays.index(day) for day in days]
-    days_of_week = [day for day in days_of_week if day < 5]
-
-    weekly_tasks = []
-    day_iterator = start_date.date()
-    while day_iterator < end_date.date():
-        if day_iterator.weekday() in days_of_week:
-            effective_due_date_for_window = day_iterator
-            if task.time_window_end < task.time_window_start:
-                # overnight task
-                effective_due_date_for_window += timedelta(days=1)
-            instance_due_by = datetime.combine(
-                effective_due_date_for_window, task.time_window_end
-            )
-            instance_task = Task(
-                id=str(uuid.uuid4()),
-                content=task.content,
-                duration=task.duration,
-                task_type="recurring_instance",
-                due_by=instance_due_by,
-                time_window_start=task.time_window_start,
-                time_window_end=task.time_window_end,
-                is_active=True,
-            )
-            instance_task.instance_date = day_iterator
-            instance_task.original_master_task_id = task.id
-            weekly_tasks.append(instance_task)
-        day_iterator += timedelta(days=1)
-    return weekly_tasks
-
-
-def expand_recurring_tasks(recurring_tasks, start_date, end_date):
-    """Convert recurring tasks into individual task instances within the date range."""
-    individual_recurring_tasks = []
-
-    for task in recurring_tasks:
-        assert task.due_by is None, "Recurring tasks must not have a due date"
-        assert (
-            task.time_window_start is not None
-        ), "Recurring tasks must have a time window"
-
-        if task.recurrence["type"] == "daily":
-            individual_recurring_tasks.extend(
-                expand_daily_recurring_task(task, start_date, end_date)
-            )
-        elif task.recurrence["type"] == "weekly":
-            individual_recurring_tasks.extend(
-                expand_weekly_recurring_task(task, start_date, end_date)
-            )
-        else:
-            raise ValueError(f"Unsupported recurrence pattern: {task.recurrence}")
-
-    return individual_recurring_tasks
-
-
-def get_task_dependencies():
-    """Get all task dependencies from the database."""
-    dependencies = {}
-    for dep in db.session.query(TaskDependency).all():
-        if dep.task_id not in dependencies:
-            dependencies[dep.task_id] = []
-        dependencies[dep.task_id].append(dep.dependency_id)
-    return dependencies
 
 
 def generate_schedule(start_date, end_date):
@@ -693,17 +395,10 @@ def generate_schedule(start_date, end_date):
     """
     # Fetch relevant data from database
     calendar_events = get_calendar_events(start_date, end_date)
-    one_off_tasks = get_one_off_tasks(start_date)
-    recurring_tasks = get_recurring_tasks()
 
-    # Expand recurring tasks into individual instances
-    individual_recurring_tasks = expand_recurring_tasks(
-        recurring_tasks, start_date, end_date
-    )
-
-    # Combine one-off and recurring tasks
-    tasks = one_off_tasks + individual_recurring_tasks
-
+    # reset recurring tasks, expanding them into individual instances
+    reset_recurring_events(start_date, end_date)
+    tasks = get_tasks(start_date, end_date)
     # Get task dependencies
     task_dependencies = get_task_dependencies()
 

@@ -1,22 +1,36 @@
-import { useCallback, useEffect, useState } from "react";
+import { addWeeks, startOfWeek, subWeeks } from "date-fns";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { ScheduledTask } from "@/types/schedule";
+import { appConfig } from "@/constants/appConfig";
 import { handleApiErrorWithToast } from "@/utils/errorUtils";
 import scheduleService from "@/services/scheduleService";
 
 /**
  * Hook for managing schedules
  */
-export function useSchedule(
-  initialStartDate = new Date(),
-  initialEndDate = new Date(new Date().setDate(new Date().getDate() + 7))
-) {
-  const [startDate, setStartDate] = useState<Date>(initialStartDate);
-  const [endDate, setEndDate] = useState<Date>(initialEndDate);
+export function useSchedule(initialDate = new Date()) {
+  const [currentDate, setCurrentDate] = useState<Date>(initialDate);
   const [scheduledTasks, setScheduledTasks] = useState<ScheduledTask[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Calculate week range based on current date using useMemo to avoid recreating objects
+  const { startDate, endDate } = useMemo(() => {
+    const { weekStartsOn, weekLength } = appConfig.calendar;
+    // Convert weekStartsOn to 0|1|2|3|4|5|6 type that date-fns expects
+    const startDay = weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+    const start = startOfWeek(currentDate, { weekStartsOn: startDay });
+    const end = new Date(start);
+    end.setDate(start.getDate() + weekLength - 1);
+    // Set end time to end of day
+    end.setHours(23, 59, 59, 999);
+
+    return { startDate: start, endDate: end };
+  }, [currentDate]);
 
   // Fetch the schedule for current date range
   const fetchSchedule = useCallback(async () => {
@@ -45,6 +59,7 @@ export function useSchedule(
         endDate
       );
       setScheduledTasks(newTasks);
+      setLastSyncTime(new Date());
       return true;
     } catch (err) {
       const errorMessage = "Failed to generate schedule. Please try again.";
@@ -64,9 +79,10 @@ export function useSchedule(
       updateData: { start?: Date; end?: Date; status?: string }
     ) => {
       try {
+        setIsLoading(true);
         await scheduleService.updateScheduledTask(taskId, updateData);
         // Refresh the schedule after updating
-        fetchSchedule();
+        await fetchSchedule();
         return true;
       } catch (err) {
         const errorMessage = "Failed to update task. Please try again.";
@@ -74,6 +90,8 @@ export function useSchedule(
         console.error("Error updating scheduled task:", err);
         handleApiErrorWithToast(err, "updating task");
         return false;
+      } finally {
+        setIsLoading(false);
       }
     },
     [fetchSchedule]
@@ -81,29 +99,28 @@ export function useSchedule(
 
   const clearAllScheduledTasks = useCallback(async () => {
     try {
+      setIsLoading(true);
       await scheduleService.clearAllScheduledTasks();
-      fetchSchedule();
+      await fetchSchedule();
     } catch (err) {
       console.error("Error clearing scheduled tasks:", err);
       handleApiErrorWithToast(err, "clearing scheduled tasks");
+    } finally {
+      setIsLoading(false);
     }
   }, [fetchSchedule]);
 
   // Navigation functions
   const nextWeek = useCallback(() => {
-    setStartDate(new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000));
-    setEndDate(new Date(endDate.getTime() + 7 * 24 * 60 * 60 * 1000));
-  }, [startDate, endDate]);
+    setCurrentDate((prev) => addWeeks(prev, 1));
+  }, []);
 
   const prevWeek = useCallback(() => {
-    setStartDate(new Date(startDate.getTime() - 7 * 24 * 60 * 60 * 1000));
-    setEndDate(new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000));
-  }, [startDate, endDate]);
+    setCurrentDate((prev) => subWeeks(prev, 1));
+  }, []);
 
   const goToToday = useCallback(() => {
-    const today = new Date();
-    setStartDate(today);
-    setEndDate(new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000));
+    setCurrentDate(new Date());
   }, []);
 
   // Load schedule when date range changes
@@ -112,11 +129,13 @@ export function useSchedule(
   }, [fetchSchedule]);
 
   return {
+    currentDate,
     startDate,
     endDate,
     scheduledTasks,
     isLoading,
     isGenerating,
+    lastSyncTime,
     error,
     fetchSchedule,
     generateSchedule,
@@ -125,5 +144,6 @@ export function useSchedule(
     prevWeek,
     goToToday,
     clearAllScheduledTasks,
+    refreshSchedule: fetchSchedule,
   };
 }

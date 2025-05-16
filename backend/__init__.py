@@ -31,7 +31,8 @@ def create_app(config_class: Config):
     migrate.init_app(app, db)
 
     # Import blueprints
-    from backend.routes import auth_bp, base_bp, calendar_bp, schedule_bp, task_bp
+    from backend.calendar_routes import calendar_bp
+    from backend.routes import auth_bp, base_bp, schedule_bp, settings_bp, task_bp
 
     # Register blueprints
     app.register_blueprint(base_bp)
@@ -39,6 +40,7 @@ def create_app(config_class: Config):
     app.register_blueprint(task_bp)
     app.register_blueprint(calendar_bp)
     app.register_blueprint(schedule_bp)
+    app.register_blueprint(settings_bp)
 
     if not app.debug:
         mail_handler = SMTPHandler(

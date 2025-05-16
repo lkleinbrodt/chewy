@@ -52,6 +52,7 @@ const oneOffTaskSchema = Yup.object({
   is_completed: Yup.boolean(),
 });
 
+// Validation schema for recurring tasks
 const recurringTaskSchema = Yup.object({
   content: Yup.string()
     .required("Task content is required")
@@ -61,47 +62,53 @@ const recurringTaskSchema = Yup.object({
     .required("Duration is required")
     .positive("Duration must be positive")
     .max(1440, "Task duration cannot exceed 24 hours (1440 minutes)"),
+  task_type: Yup.string()
+    .oneOf(["recurring"], "Invalid task type")
+    .required("Task type is required"),
   recurrence: Yup.object({
     type: Yup.string()
-      .oneOf(["daily", "weekly"])
+      .oneOf(["daily", "weekly"], "Invalid recurrence type")
       .required("Recurrence type is required"),
     days: Yup.array().when("type", {
       is: "weekly",
       then: (schema) =>
         schema
-          .min(1, "Select at least one day")
-          .required("At least one day is required"),
+          .of(Yup.string())
+          .min(1, "Select at least one day of the week")
+          .required("Days are required for weekly recurrence"),
       otherwise: (schema) => schema.notRequired(),
     }),
   }).required("Recurrence pattern is required"),
-  time_window: Yup.object({
-    start: Yup.string().nullable(),
-    end: Yup.string()
-      .nullable()
-      .when("start", {
-        is: (value: string) => value && value.length > 0,
-        then: (schema) =>
-          schema.required("End time is required when start time is specified"),
-        otherwise: (schema) => schema.nullable(),
-      }),
-  }).test(
-    "time-window-valid-range",
-    "End time must be after start time",
-    function (value) {
-      if (value.start && value.end) {
-        const [startHours, startMinutes] = value.start.split(":").map(Number);
-        const [endHours, endMinutes] = value.end.split(":").map(Number);
-
-        const startTotalMinutes = startHours * 60 + startMinutes;
-        const endTotalMinutes = endHours * 60 + endMinutes;
-
-        return endTotalMinutes > startTotalMinutes;
-      }
-      return true;
-    }
-  ),
+  time_window_start: Yup.string().nullable(),
+  time_window_end: Yup.string()
+    .nullable()
+    .when("time_window_start", {
+      is: (value: string) => value && value.length > 0,
+      then: (schema) =>
+        schema.required("End time is required when start time is specified"),
+      otherwise: (schema) => schema.nullable(),
+    }),
   is_active: Yup.boolean(),
-});
+}).test(
+  "time-window-valid-range",
+  "End time must be after start time",
+  function (value) {
+    if (value.time_window_start && value.time_window_end) {
+      const [startHours, startMinutes] = value.time_window_start
+        .split(":")
+        .map(Number);
+      const [endHours, endMinutes] = value.time_window_end
+        .split(":")
+        .map(Number);
+
+      const startTotalMinutes = startHours * 60 + startMinutes;
+      const endTotalMinutes = endHours * 60 + endMinutes;
+
+      return endTotalMinutes > startTotalMinutes;
+    }
+    return true;
+  }
+);
 
 // Days of the week for selection
 const weekDays = [
@@ -163,13 +170,14 @@ const TaskForm = ({
       initialData?.task_type === "recurring"
         ? initialData.recurrence
         : { type: "daily" },
-    time_window:
+    time_window_start:
       initialData?.task_type === "recurring"
-        ? {
-            start: initialData.time_window.start || "",
-            end: initialData.time_window.end || "",
-          }
-        : { start: "", end: "" },
+        ? initialData.time_window_start || ""
+        : "",
+    time_window_end:
+      initialData?.task_type === "recurring"
+        ? initialData.time_window_end || ""
+        : "",
     is_active:
       initialData?.task_type === "recurring" ? initialData.is_active : true,
   };
@@ -218,7 +226,8 @@ const TaskForm = ({
             duration: 30,
             task_type: "recurring",
             recurrence: { type: "daily" },
-            time_window: { start: "", end: "" },
+            time_window_start: "",
+            time_window_end: "",
             is_active: true,
           },
         });
@@ -264,24 +273,6 @@ const TaskForm = ({
 
   const oneOffDuration = formatDuration(oneOffFormik.values.duration);
   const recurringDuration = formatDuration(recurringFormik.values.duration);
-
-  // Helper function to safely access nested Formik error properties
-  const getNestedErrorMessage = (
-    errors: Record<string, unknown>,
-    path: string[]
-  ): string | undefined => {
-    let current: unknown = errors;
-
-    for (const key of path) {
-      if (current && typeof current === "object" && key in current) {
-        current = (current as Record<string, unknown>)[key];
-      } else {
-        return undefined;
-      }
-    }
-
-    return typeof current === "string" ? current : undefined;
-  };
 
   // Handle DatePicker change for one-off tasks
   const handleDateChange = (date: Date | null) => {
@@ -631,32 +622,24 @@ const TaskForm = ({
                     <Input
                       id="start-time"
                       type="time"
-                      value={recurringFormik.values.time_window?.start || ""}
+                      value={recurringFormik.values.time_window_start || ""}
                       onChange={(e) =>
                         recurringFormik.setFieldValue(
-                          "time_window.start",
+                          "time_window_start",
                           e.target.value || ""
                         )
                       }
                       className={
-                        getNestedErrorMessage(recurringFormik.errors, [
-                          "time_window",
-                          "start",
-                        ]) && recurringFormik.touched.time_window
+                        recurringFormik.errors.time_window_start &&
+                        recurringFormik.touched.time_window_start
                           ? "border-red-500"
                           : ""
                       }
                     />
-                    {getNestedErrorMessage(recurringFormik.errors, [
-                      "time_window",
-                      "start",
-                    ]) &&
-                      recurringFormik.touched.time_window && (
+                    {recurringFormik.errors.time_window_start &&
+                      recurringFormik.touched.time_window_start && (
                         <p className="text-sm text-red-500">
-                          {getNestedErrorMessage(recurringFormik.errors, [
-                            "time_window",
-                            "start",
-                          ])}
+                          {String(recurringFormik.errors.time_window_start)}
                         </p>
                       )}
                   </div>
@@ -667,32 +650,24 @@ const TaskForm = ({
                     <Input
                       id="end-time"
                       type="time"
-                      value={recurringFormik.values.time_window?.end || ""}
+                      value={recurringFormik.values.time_window_end || ""}
                       onChange={(e) =>
                         recurringFormik.setFieldValue(
-                          "time_window.end",
+                          "time_window_end",
                           e.target.value || ""
                         )
                       }
                       className={
-                        getNestedErrorMessage(recurringFormik.errors, [
-                          "time_window",
-                          "end",
-                        ]) && recurringFormik.touched.time_window
+                        recurringFormik.errors.time_window_end &&
+                        recurringFormik.touched.time_window_end
                           ? "border-red-500"
                           : ""
                       }
                     />
-                    {getNestedErrorMessage(recurringFormik.errors, [
-                      "time_window",
-                      "end",
-                    ]) &&
-                      recurringFormik.touched.time_window && (
+                    {recurringFormik.errors.time_window_end &&
+                      recurringFormik.touched.time_window_end && (
                         <p className="text-sm text-red-500">
-                          {getNestedErrorMessage(recurringFormik.errors, [
-                            "time_window",
-                            "end",
-                          ])}
+                          {String(recurringFormik.errors.time_window_end)}
                         </p>
                       )}
                   </div>
@@ -701,12 +676,6 @@ const TaskForm = ({
                   Specify the preferred time range for this task (using your
                   local time).
                 </p>
-                {typeof recurringFormik.errors.time_window === "string" &&
-                  recurringFormik.touched.time_window && (
-                    <p className="text-sm text-red-500 col-span-2 mt-1">
-                      {recurringFormik.errors.time_window}
-                    </p>
-                  )}
               </div>
 
               <DialogFooter>

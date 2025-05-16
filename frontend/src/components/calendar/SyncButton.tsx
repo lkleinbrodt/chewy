@@ -10,7 +10,11 @@ import { RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 
 interface SyncButtonProps {
-  onSync: () => Promise<void>;
+  onSync: () => Promise<{
+    success: boolean;
+    needsDirectorySetup?: boolean;
+    message?: string;
+  }>;
   isSyncing: boolean;
   lastSyncTime: Date | null;
 }
@@ -33,10 +37,8 @@ const SyncButton = ({ onSync, isSyncing, lastSyncTime }: SyncButtonProps) => {
             disabled={isSyncing}
             className="flex items-center gap-2"
           >
-            <RefreshCw
-              className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`}
-            />
-            {isSyncing ? "Syncing..." : "Sync Calendar"}
+            <RefreshCw className="h-4 w-4" />
+            Sync Calendar
           </Button>
         </TooltipTrigger>
         <TooltipContent>

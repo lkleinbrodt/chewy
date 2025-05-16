@@ -50,12 +50,6 @@ fi
 echo -e "${GREEN}Installing Python dependencies...${NC}"
 pip install -r requirements.txt
 
-# 3. Initialize and upgrade the database if it doesn't exist
-echo -e "${GREEN}Setting up the database...${NC}"
-if [ ! -f "app.db" ]; then
-    echo "Initializing database..."
-    flask db init
-fi
 
 echo "Upgrading database schema..."
 flask db upgrade

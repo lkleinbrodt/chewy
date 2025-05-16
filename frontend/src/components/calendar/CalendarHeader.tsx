@@ -3,7 +3,6 @@ import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SyncButton from "./SyncButton";
 import { formatDateRange } from "@/utils/dateUtils";
-import { useSchedule } from "@/hooks/useSchedule";
 
 interface CalendarHeaderProps {
   startDate: Date;
@@ -11,8 +10,13 @@ interface CalendarHeaderProps {
   onPrevWeek: () => void;
   onNextWeek: () => void;
   onToday: () => void;
-  onSync: () => Promise<void>;
+  onSync: () => Promise<{
+    success: boolean;
+    needsDirectorySetup?: boolean;
+    message?: string;
+  }>;
   onGenerateSchedule: () => Promise<boolean>;
+  onClearAllTasks: () => Promise<void>;
   isSyncing: boolean;
   isGenerating: boolean;
   lastSyncTime: Date | null;
@@ -26,12 +30,11 @@ const CalendarHeader = ({
   onToday,
   onSync,
   onGenerateSchedule,
+  onClearAllTasks,
   isSyncing,
-  isGenerating,
   lastSyncTime,
 }: CalendarHeaderProps) => {
   const dateRange = formatDateRange(startDate, endDate);
-  const { clearAllScheduledTasks } = useSchedule();
 
   return (
     <div className="flex items-center justify-between px-4 pb-3 border-b">
@@ -76,7 +79,6 @@ const CalendarHeader = ({
 
         <Button
           onClick={onGenerateSchedule}
-          disabled={isGenerating}
           variant="outline"
           size="sm"
           className="px-3 py-1 text-sm"
@@ -87,11 +89,11 @@ const CalendarHeader = ({
 
         <SyncButton
           onSync={onSync}
-          isSyncing={false}
+          isSyncing={isSyncing}
           lastSyncTime={lastSyncTime}
         />
         <Button
-          onClick={clearAllScheduledTasks}
+          onClick={onClearAllTasks}
           variant="outline"
           size="sm"
           className="px-3 py-1 text-sm"

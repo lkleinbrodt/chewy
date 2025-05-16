@@ -1,22 +1,19 @@
 import { addWeeks, startOfWeek, subWeeks } from "date-fns";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { AxiosError } from "axios";
 import type { CalendarEvent } from "@/types/calendar";
-import type { ScheduledTask } from "@/types/schedule";
 import { appConfig } from "@/constants/appConfig";
 import calendarService from "@/services/calendarApi";
 import { formatEventForApi } from "@/utils/calendarUtils";
 import { handleApiErrorWithToast } from "@/utils/errorUtils";
-import scheduleService from "@/services/scheduleService";
 
 export function useCalendar(initialDate = new Date()) {
   const [currentDate, setCurrentDate] = useState<Date>(initialDate);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [scheduledTasks, setScheduledTasks] = useState<ScheduledTask[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   // Calculate week range based on current date using useMemo to avoid recreating objects
@@ -51,69 +48,6 @@ export function useCalendar(initialDate = new Date()) {
     }
   }, [startDate, endDate]);
 
-  // Fetch scheduled tasks for current week
-  const fetchSchedule = useCallback(async () => {
-    try {
-      setLoading(true);
-      const tasks = await scheduleService.getSchedule(startDate, endDate);
-      setScheduledTasks(tasks);
-      setError(null);
-    } catch (err) {
-      // Don't override the error if it's from fetching events
-      if (!error) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to fetch schedule";
-        setError(errorMessage);
-        handleApiErrorWithToast(err, "fetching schedule");
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [startDate, endDate, error]);
-
-  // Generate a new schedule
-  const generateSchedule = async () => {
-    try {
-      setIsGenerating(true);
-      const newTasks = await scheduleService.generateSchedule(
-        startDate,
-        endDate
-      );
-      setScheduledTasks(newTasks);
-      setError(null);
-      return true;
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to generate schedule";
-      setError(errorMessage);
-      handleApiErrorWithToast(err, "generating schedule");
-      return false;
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  // Update a scheduled task
-  const updateScheduledTask = async (
-    taskId: string,
-    updateData: { start?: Date; end?: Date; status?: string }
-  ) => {
-    try {
-      setLoading(true);
-      await scheduleService.updateScheduledTask(taskId, updateData);
-      await fetchSchedule(); // Refresh tasks after update
-      return true;
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to update task";
-      setError(errorMessage);
-      handleApiErrorWithToast(err, "updating task");
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Navigate to next week
   const nextWeek = () => {
     setCurrentDate((prev) => addWeeks(prev, 1));
@@ -137,11 +71,25 @@ export function useCalendar(initialDate = new Date()) {
       await fetchEvents(); // Refresh events after sync
       setLastSyncTime(new Date());
       setError(null);
+      return { success: true };
     } catch (err) {
+      // Check for the special calendar directory error
+      const axiosError = err as AxiosError<{ error: string; message: string }>;
+      if (axiosError.response?.data?.error === "CALENDAR_DIR_NOT_SET") {
+        return {
+          success: false,
+          needsDirectorySetup: true,
+          message:
+            axiosError.response.data.message ||
+            "Calendar directory not configured",
+        };
+      }
+
       const errorMessage =
         err instanceof Error ? err.message : "Failed to synchronize calendar";
       setError(errorMessage);
       handleApiErrorWithToast(err, "synchronizing calendar");
+      return { success: false };
     } finally {
       setIsSyncing(false);
     }
@@ -175,32 +123,23 @@ export function useCalendar(initialDate = new Date()) {
 
   // Fetch data when week range changes
   useEffect(() => {
-    const loadData = async () => {
-      await fetchEvents();
-      await fetchSchedule();
-    };
-    loadData();
-  }, [fetchEvents, fetchSchedule]);
+    fetchEvents();
+  }, [fetchEvents]);
 
   return {
     currentDate,
     startDate,
     endDate,
     events,
-    scheduledTasks,
     loading,
     error,
     isSyncing,
-    isGenerating,
     lastSyncTime,
     nextWeek,
     prevWeek,
     goToToday,
     syncCalendar,
-    generateSchedule,
     updateEvent,
-    updateScheduledTask,
     refreshEvents: fetchEvents,
-    refreshSchedule: fetchSchedule,
   };
 }

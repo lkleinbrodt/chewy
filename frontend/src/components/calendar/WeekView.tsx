@@ -3,7 +3,6 @@ import { getEventsForDay, getWeekDays } from "@/utils/dateUtils";
 import type { CalendarEvent } from "@/types/calendar";
 import DayColumn from "./DayColumn";
 import type { ScheduledTask } from "@/types/schedule";
-import { Skeleton } from "@/components/ui/skeleton";
 import TimeGrid from "./TimeGrid";
 import { appConfig } from "@/constants/appConfig";
 
@@ -97,27 +96,22 @@ const WeekView = ({
 
   if (loading) {
     return (
-      <div className="flex-1 flex">
-        <div className="w-16 relative border-r">
-          <Skeleton className="h-12 w-full" />
-          <div className="space-y-2 pt-2 px-2">
-            {Array.from({ length: configEndHour - configStartHour }).map(
-              (_, i) => (
-                <Skeleton key={i} className="h-8 w-10" />
-              )
-            )}
-          </div>
-        </div>
-        <div className="flex-1 grid grid-cols-5">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="border-r">
-              <Skeleton className="h-12 w-full" />
-              <div className="p-2 space-y-2">
-                {Array.from({ length: (i % 3) + 1 }).map((_, j) => (
-                  <Skeleton key={j} className="h-16 w-full" />
-                ))}
-              </div>
-            </div>
+      <div className="flex-1 overflow-auto flex">
+        <TimeGrid startHour={displayStartHour} endHour={displayEndHour} />
+
+        {/* Day columns */}
+        <div className="flex flex-1">
+          {weekDays.map((day) => (
+            <DayColumn
+              key={day.toString()}
+              date={day}
+              events={[]}
+              scheduledTasks={[]}
+              onEventClick={() => {}}
+              onTaskClick={() => {}}
+              startHour={displayStartHour}
+              endHour={displayEndHour}
+            />
           ))}
         </div>
       </div>

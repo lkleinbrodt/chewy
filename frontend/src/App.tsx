@@ -7,6 +7,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import CalendarPage from "./pages/CalendarPage";
 import Layout from "./components/common/Layout";
 import Login from "./pages/LoginPage";
+import SettingsPage from "./pages/SettingsPage";
 import TaskListPage from "./pages/TaskListPage";
 import { ThemeProvider } from "./components/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
@@ -24,6 +25,7 @@ function App() {
               <Route index element={<TaskListPage />} />
               <Route path="tasks" element={<TaskListPage />} />
               <Route path="calendar" element={<CalendarPage />} />
+              <Route path="settings" element={<SettingsPage />} />
             </Route>
 
             {/* <Route element={<PrivateRoute />}>

@@ -7,8 +7,8 @@ from ortools.sat.python import cp_model
 from backend import create_app
 from backend.config import Config, TestingConfig
 from backend.extensions import create_logger, db
-from backend.models import CalendarEvent, ScheduledTask, Task, TaskDependency
-from backend.src.scheduler import generate_schedule
+from backend.models import CalendarEvent, RecurringEvent, Task, TaskDependency
+from backend.src.scheduling.scheduler import generate_schedule
 
 
 def create_test_environment(days=5):
@@ -24,7 +24,7 @@ def create_test_environment(days=5):
     from backend.models import CalendarEvent, Task, TaskDependency
 
     # Clear existing test data
-    ScheduledTask.query.delete()
+    RecurringEvent.query.delete()
     TaskDependency.query.delete()
     Task.query.delete()
     CalendarEvent.query.filter_by(is_chewy_managed=False).delete()
@@ -70,17 +70,14 @@ def create_test_environment(days=5):
         )
 
     # Create a recurring task
-    recurring_task = Task(
+    recurring_event = RecurringEvent(
         content="Daily Review",
         duration=45,  # 45 minutes
-        task_type="recurring",
-        recurrence={"type": "daily"},
+        recurrence=[0, 1, 2, 3, 4],
         time_window_start=create_time(0, 0),
         time_window_end=create_time(23, 0),
-        is_active=True,
     )
-    db.session.add(recurring_task)
-    tasks.append(recurring_task)
+    db.session.add(recurring_event)
 
     # Create some calendar events
     events = []
@@ -256,32 +253,6 @@ def run_scheduler_test(days=5):
     print(visualization)
 
     return scheduled_tasks, visualization
-
-
-def save_scheduled_tasks(scheduled_tasks):
-    """
-    Save scheduled tasks to the database.
-
-    Args:
-        scheduled_tasks (list): List of scheduled task dictionaries
-
-    Returns:
-        list: List of created ScheduledTask objects
-    """
-    created_tasks = []
-
-    for task_data in scheduled_tasks:
-        scheduled_task = ScheduledTask(
-            task_id=task_data["task_id"],
-            start=task_data["start"],
-            end=task_data["end"],
-            status="scheduled",
-        )
-        db.session.add(scheduled_task)
-        created_tasks.append(scheduled_task)
-
-    db.session.commit()
-    return created_tasks
 
 
 if __name__ == "__main__":

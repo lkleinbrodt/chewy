@@ -9,6 +9,8 @@ export interface BaseTask {
   task_type: "one-off" | "recurring";
   created_at: string;
   updated_at: string;
+  time_window_start: string | null; // Format: "HH:MM"
+  time_window_end: string | null; // Format: "HH:MM"
 }
 
 // One-off task specific fields
@@ -24,18 +26,13 @@ export interface RecurrencePattern {
   days?: string[]; // For weekly recurrence, contains days of week
 }
 
-// Time window for recurring tasks
-export interface TimeWindow {
-  start: string | null; // Format: "HH:MM"
-  end: string | null; // Format: "HH:MM"
-}
-
 // Recurring task specific fields
 export interface RecurringTask extends BaseTask {
   task_type: "recurring";
   recurrence: RecurrencePattern;
-  time_window: TimeWindow;
   is_active: boolean;
+  recurring_event_id?: string;
+  instance_date?: string;
 }
 
 // Union type for all task types
@@ -47,6 +44,8 @@ export interface TaskFormData {
   duration: number; // in minutes
   task_type: "one-off" | "recurring";
   is_completed?: boolean;
+  time_window_start?: string | null;
+  time_window_end?: string | null;
 }
 
 export interface OneOffTaskFormData extends TaskFormData {
@@ -59,10 +58,6 @@ export interface OneOffTaskFormData extends TaskFormData {
 export interface RecurringTaskFormData extends TaskFormData {
   task_type: "recurring";
   recurrence: RecurrencePattern;
-  time_window?: {
-    start: string;
-    end: string;
-  };
   is_active?: boolean;
 }
 

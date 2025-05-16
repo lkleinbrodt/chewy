@@ -1,3 +1,5 @@
+import { CalendarIcon, CheckSquare, Settings } from "lucide-react";
+import { Link, NavLink } from "react-router-dom";
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -5,8 +7,6 @@ import {
   NavigationMenuList,
   navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu";
-
-import { Link } from "react-router-dom";
 
 const Header = () => {
   return (
@@ -29,7 +29,17 @@ const Header = () => {
                   " text-sm px-4 py-2 font-medium"
                 }
               >
-                <Link to="/tasks">Tasks</Link>
+                <NavLink
+                  to="/tasks"
+                  className={({ isActive }) =>
+                    `flex items-center ${
+                      isActive ? "bg-accent text-accent-foreground" : ""
+                    }`
+                  }
+                >
+                  <CheckSquare className="w-4 h-4 mr-2" />
+                  Tasks
+                </NavLink>
               </NavigationMenuLink>
             </NavigationMenuItem>
             <NavigationMenuItem>
@@ -40,7 +50,38 @@ const Header = () => {
                   " text-sm px-4 py-2 font-medium"
                 }
               >
-                <Link to="/calendar">Calendar</Link>
+                <NavLink
+                  to="/calendar"
+                  className={({ isActive }) =>
+                    `flex items-center ${
+                      isActive ? "bg-accent text-accent-foreground" : ""
+                    }`
+                  }
+                >
+                  <CalendarIcon className="w-4 h-4 mr-2" />
+                  Calendar
+                </NavLink>
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+            <NavigationMenuItem>
+              <NavigationMenuLink
+                asChild
+                className={
+                  navigationMenuTriggerStyle() +
+                  " text-sm px-4 py-2 font-medium"
+                }
+              >
+                <NavLink
+                  to="/settings"
+                  className={({ isActive }) =>
+                    `flex items-center ${
+                      isActive ? "bg-accent text-accent-foreground" : ""
+                    }`
+                  }
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  Settings
+                </NavLink>
               </NavigationMenuLink>
             </NavigationMenuItem>
           </NavigationMenuList>

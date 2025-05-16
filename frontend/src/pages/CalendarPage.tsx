@@ -1,5 +1,7 @@
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useEffect, useState } from "react";
 
+import CalendarDirectorySelector from "@/components/settings/CalendarDirectorySelector";
 import type { CalendarEvent } from "@/types/calendar";
 import CalendarHeader from "@/components/calendar/CalendarHeader";
 import EventDetails from "@/components/calendar/EventDetails";
@@ -8,32 +10,50 @@ import type { ScheduledTask } from "@/types/schedule";
 import ScheduledTaskDetails from "@/components/tasks/ScheduledTaskDetails";
 import WeekView from "@/components/calendar/WeekView";
 import { useCalendar } from "@/hooks/useCalendar";
-import { useState } from "react";
+import { useSchedule } from "@/hooks/useSchedule";
 
 const CalendarPage = () => {
   const {
-    startDate,
-    endDate,
+    startDate: calendarStartDate,
+    endDate: calendarEndDate,
     events,
-    scheduledTasks,
-    loading,
-    error,
+    loading: calendarLoading,
+    error: calendarError,
     isSyncing,
-    isGenerating,
     lastSyncTime,
-    nextWeek,
-    prevWeek,
-    goToToday,
+    nextWeek: calendarNextWeek,
+    prevWeek: calendarPrevWeek,
+    goToToday: calendarGoToToday,
     syncCalendar,
-    generateSchedule,
     updateEvent,
-    updateScheduledTask,
   } = useCalendar();
+
+  const {
+    startDate: scheduleStartDate,
+    scheduledTasks,
+    isLoading: scheduleLoading,
+    isGenerating,
+    error: scheduleError,
+    nextWeek: scheduleNextWeek,
+    prevWeek: schedulePrevWeek,
+    goToToday: scheduleGoToToday,
+    generateSchedule,
+    updateScheduledTask,
+    clearAllScheduledTasks,
+  } = useSchedule();
 
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(
     null
   );
   const [selectedTask, setSelectedTask] = useState<ScheduledTask | null>(null);
+  const [showDirectorySelector, setShowDirectorySelector] = useState(false);
+
+  // Keep calendar and schedule date ranges in sync
+  useEffect(() => {
+    if (calendarStartDate.getTime() !== scheduleStartDate.getTime()) {
+      scheduleGoToToday();
+    }
+  }, [calendarStartDate, scheduleStartDate, scheduleGoToToday]);
 
   const handleEventClick = (event: CalendarEvent) => {
     setSelectedEvent(event);
@@ -62,16 +82,54 @@ const CalendarPage = () => {
     return success;
   };
 
+  const handleSyncCalendar = async () => {
+    const result = await syncCalendar();
+    if (result.needsDirectorySetup) {
+      setShowDirectorySelector(true);
+    }
+    return result;
+  };
+
+  // First sync calendar, then generate schedule only if sync was successful
+  const handleGenerateSchedule = async () => {
+    const syncResult = await handleSyncCalendar();
+    if (syncResult.success) {
+      return await generateSchedule();
+    }
+    return false;
+  };
+
+  // Combined navigation functions to keep both hooks in sync
+  const nextWeek = () => {
+    calendarNextWeek();
+    scheduleNextWeek();
+  };
+
+  const prevWeek = () => {
+    calendarPrevWeek();
+    schedulePrevWeek();
+  };
+
+  const goToToday = () => {
+    calendarGoToToday();
+    scheduleGoToToday();
+  };
+
+  // Combine errors from both hooks
+  const error = calendarError || scheduleError;
+  const loading = calendarLoading || scheduleLoading;
+
   return (
     <div className="flex flex-col h-full">
       <CalendarHeader
-        startDate={startDate}
-        endDate={endDate}
+        startDate={calendarStartDate}
+        endDate={calendarEndDate}
         onPrevWeek={prevWeek}
         onNextWeek={nextWeek}
         onToday={goToToday}
-        onSync={syncCalendar}
-        onGenerateSchedule={generateSchedule}
+        onSync={handleSyncCalendar}
+        onGenerateSchedule={handleGenerateSchedule}
+        onClearAllTasks={clearAllScheduledTasks}
         isSyncing={isSyncing}
         isGenerating={isGenerating}
         lastSyncTime={lastSyncTime}
@@ -86,7 +144,7 @@ const CalendarPage = () => {
 
       <div className="flex-1 bg-white dark:bg-slate-900 rounded-md border overflow-hidden">
         <WeekView
-          startDate={startDate}
+          startDate={calendarStartDate}
           events={events}
           scheduledTasks={scheduledTasks}
           loading={loading}
@@ -110,6 +168,12 @@ const CalendarPage = () => {
           onUpdate={updateScheduledTask}
         />
       )}
+
+      <CalendarDirectorySelector
+        isOpen={showDirectorySelector}
+        onClose={() => setShowDirectorySelector(false)}
+        onDirectorySet={handleSyncCalendar}
+      />
     </div>
   );
 };

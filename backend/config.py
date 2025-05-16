@@ -1,6 +1,6 @@
+import json
 import os
 import uuid
-from datetime import timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -24,12 +24,10 @@ class Config:
     REMEMBER_COOKIE_SECURE = True  # Same for "remember me" cookie
     SESSION_COOKIE_HTTPONLY = True  # Prevent client-side JS access to cookie
 
-    # Calendar JSON files directory
-    CALENDAR_JSON_DIR = os.environ.get(
-        "CALENDAR_JSON_DIR", os.path.join(ROOT_DIR, "calendar_data")
-    )
-    if not os.path.exists(CALENDAR_JSON_DIR):
-        os.makedirs(CALENDAR_JSON_DIR)
+    SETTINGS_FILE = os.path.join(ROOT_DIR, "_settings.json")
+    if not os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump({}, f)
 
     # These are in UTC
     WORK_START_HOUR = 15
