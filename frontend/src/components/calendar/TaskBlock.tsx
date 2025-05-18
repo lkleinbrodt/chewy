@@ -1,11 +1,11 @@
 import { Badge } from "@/components/ui/badge";
-import type { ScheduledTask } from "@/types/schedule";
+import type { Task } from "@/types/task";
 import { cn } from "@/lib/utils";
 import { dateUtils } from "@/utils/dateUtils";
 
 interface TaskBlockProps {
-  task: ScheduledTask;
-  onClick?: (task: ScheduledTask) => void;
+  task: Task;
+  onClick?: (task: Task) => void;
   style: React.CSSProperties;
 }
 
@@ -39,16 +39,17 @@ const TaskBlock = ({ task, onClick, style }: TaskBlockProps) => {
       onClick={handleClick}
     >
       <div className="flex justify-between items-start">
-        <div className="font-medium line-clamp-2">{task.task_content}</div>
+        <div className="font-medium line-clamp-2">{task.content}</div>
         <Badge
-          variant={task.status === "completed" ? "secondary" : "outline"}
+          variant={task.is_completed ? "secondary" : "outline"}
           className="text-xs"
         >
-          {task.status}
+          {task.is_completed ? "Completed" : "Scheduled"}
         </Badge>
       </div>
       <div className="text-xs mt-1 text-muted-foreground">
-        {formatTime(task.start)} - {formatTime(task.end)}
+        {task.start && formatTime(task.start)} -{" "}
+        {task.end && formatTime(task.end)}
       </div>
     </div>
   );

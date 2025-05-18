@@ -1,9 +1,9 @@
 import uuid
 from datetime import datetime, time, timedelta
 
+from flask import current_app
 from ortools.sat.python import cp_model
 
-from backend.config import Config
 from backend.extensions import create_logger, db
 from backend.models import CalendarEvent, RecurringEvent, Task, TaskDependency
 from backend.src.scheduling.or_task_wrapper import ORTaskWrapper
@@ -409,8 +409,8 @@ def generate_schedule(start_date, end_date):
         task_dependencies,
         start_date,
         end_date,
-        Config.WORK_START_HOUR,
-        Config.WORK_END_HOUR,
+        current_app.config["WORK_START_HOUR"],
+        current_app.config["WORK_END_HOUR"],
     )
 
     return result_schedule, status_message

@@ -1,64 +1,108 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import type {
-  OneOffTaskFormData,
-  RecurringTaskFormData,
-  Task,
-  TaskFilters,
-} from "@/types/task";
 import { Plus, XCircle } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { Task, TaskFormData } from "@/types/task";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import type { RecurringEvent } from "@/types/recurringEvent";
 import TaskForm from "@/components/tasks/TaskForm";
 import TaskList from "@/components/tasks/TaskList";
-import { useState } from "react";
+import { dateUtils } from "@/utils/dateUtils";
+import recurringEventService from "@/services/recurringEventService";
 import { useTasks } from "@/hooks/useTasks";
 import { useToast } from "@/hooks/use-toast";
 
 const TaskListPage = () => {
-  const [activeTab, setActiveTab] = useState<string>("one-off");
   const [isFormOpen, setIsFormOpen] = useState<boolean>(false);
   const [selectedTask, setSelectedTask] = useState<Task | undefined>(undefined);
+  const [selectedRecurringEvent, setSelectedRecurringEvent] =
+    useState<RecurringEvent | null>(null);
+  const [recurringEvents, setRecurringEvents] = useState<RecurringEvent[]>([]);
+  const [loadingRecurringEvents, setLoadingRecurringEvents] = useState(false);
+
   const { toast } = useToast();
 
-  // Create filters based on active tab
-  const getFilters = (tab: string): TaskFilters => {
-    switch (tab) {
-      case "one-off":
-        return { type: "one-off", is_completed: false };
-      case "recurring":
-        return { type: "recurring" };
-      case "completed":
-        return { is_completed: true };
-      default:
-        return {};
-    }
-  };
-
-  // Use the tasks hook with initial filters
+  // Use the tasks hook with empty initial filters to get all tasks
   const {
-    tasks,
+    tasks: allTasks,
     loading,
     error,
     clearError,
-    setFilters,
     createTask,
     updateTask,
     deleteTask,
     completeTask,
-  } = useTasks(getFilters(activeTab));
+    refreshTasks,
+  } = useTasks();
 
-  // Handle tab change
-  const handleTabChange = (tab: string) => {
-    setActiveTab(tab);
-    setFilters(getFilters(tab));
+  // Load recurring events
+  useEffect(() => {
+    loadRecurringEvents();
+  }, []);
+
+  const loadRecurringEvents = async () => {
+    try {
+      setLoadingRecurringEvents(true);
+      const events = await recurringEventService.getRecurringEvents();
+      setRecurringEvents(events);
+    } catch (error) {
+      console.error("Error loading recurring events:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load recurring events",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingRecurringEvents(false);
+    }
+  };
+
+  // Handle recurring event form open
+  const handleRecurringEventEdit = (event: RecurringEvent) => {
+    setSelectedRecurringEvent(event);
+    setSelectedTask(undefined);
+    setIsFormOpen(true);
   };
 
   // Handle task form submission
-  const handleTaskFormSubmit = async (
-    data: OneOffTaskFormData | RecurringTaskFormData
-  ) => {
+  const handleTaskFormSubmit = async (data: TaskFormData) => {
     try {
+      // If this is a recurring task, create or update a recurring event
+      if (data.is_recurring_ui_flag) {
+        const recurringEventData = {
+          content: data.content,
+          duration: data.duration,
+          recurrence_days: data.recurrence_days || [],
+          time_window_start: data.time_window_start,
+          time_window_end: data.time_window_end,
+        };
+
+        if (selectedRecurringEvent) {
+          // Update existing recurring event
+          await recurringEventService.updateRecurringEvent(
+            selectedRecurringEvent.id,
+            recurringEventData
+          );
+          toast({
+            title: "Recurring event updated",
+            description: "The recurring event has been updated.",
+          });
+        } else {
+          // Create new recurring event
+          await recurringEventService.createRecurringEvent(recurringEventData);
+          toast({
+            title: "Recurring event created",
+            description: "The recurring event has been created.",
+          });
+        }
+
+        // Refresh both recurring events and tasks
+        await loadRecurringEvents();
+        await refreshTasks();
+        return Promise.resolve();
+      }
+
+      // Otherwise, handle as a regular task
       if (selectedTask) {
         await updateTask(selectedTask.id, data);
         toast({
@@ -92,11 +136,13 @@ const TaskListPage = () => {
   const handleFormClose = () => {
     setIsFormOpen(false);
     setSelectedTask(undefined);
+    setSelectedRecurringEvent(null);
   };
 
   // Handle editing task
   const handleEditTask = (task: Task) => {
     setSelectedTask(task);
+    setSelectedRecurringEvent(null);
     setIsFormOpen(true);
   };
 
@@ -114,6 +160,58 @@ const TaskListPage = () => {
     }
   };
 
+  const handleDeleteRecurringEvent = async (id: string) => {
+    if (
+      window.confirm(
+        "Are you sure you want to delete this recurring event? This will also delete all associated tasks."
+      )
+    ) {
+      try {
+        await recurringEventService.deleteRecurringEvent(id);
+        toast({
+          title: "Success",
+          description: "Recurring event deleted",
+        });
+        // Refresh both recurring events and tasks
+        await loadRecurringEvents();
+        await refreshTasks();
+      } catch (error) {
+        console.error("Error deleting recurring event:", error);
+        toast({
+          title: "Error",
+          description: "Failed to delete recurring event",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const handleResetRecurringEventTasks = async (id: string) => {
+    try {
+      // Use a 3-month window for task regeneration
+      const startDate = dateUtils.getNow().toISOString();
+      const endDate = dateUtils.addDays(dateUtils.getNow(), 90).toISOString();
+
+      await recurringEventService.resetRecurringEventTasks(
+        id,
+        startDate,
+        endDate
+      );
+      toast({
+        title: "Success",
+        description: "Tasks have been reset for this recurring event",
+      });
+      await refreshTasks();
+    } catch (error) {
+      console.error("Error resetting tasks:", error);
+      toast({
+        title: "Error",
+        description: "Failed to reset tasks",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleCompleteTask = async (taskId: string) => {
     try {
       await completeTask(taskId);
@@ -128,16 +226,35 @@ const TaskListPage = () => {
 
   const handleCreateTask = () => {
     setSelectedTask(undefined);
+    setSelectedRecurringEvent(null);
     setIsFormOpen(true);
+  };
+
+  // Convert RecurringEvent to a Task object for the TaskForm component
+  const eventToTaskForm = (event: RecurringEvent): Task => {
+    return {
+      id: event.id,
+      content: event.content,
+      duration: event.duration,
+      is_completed: false,
+      created_at: event.created_at,
+      updated_at: event.updated_at,
+      task_type: "recurring",
+      recurrence: event.recurrence,
+      time_window_start: event.time_window_start || undefined,
+      time_window_end: event.time_window_end || undefined,
+    } as Task;
   };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Tasks</h1>
-        <Button onClick={handleCreateTask}>
-          <Plus className="mr-2 h-4 w-4" /> New Task
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={handleCreateTask} className="gap-2">
+            <Plus className="h-4 w-4" /> New Task
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -157,64 +274,45 @@ const TaskListPage = () => {
         </Alert>
       )}
 
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <Tabs
-          defaultValue="one-off"
-          value={activeTab}
-          onValueChange={handleTabChange}
-          className="w-full"
-        >
-          <TabsList className="grid grid-cols-3">
-            <TabsTrigger value="one-off">One-off Tasks</TabsTrigger>
-            <TabsTrigger value="recurring">Recurring Tasks</TabsTrigger>
-            <TabsTrigger value="completed">Completed Tasks</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="one-off" className="p-6">
-            <TaskList
-              tasks={tasks}
-              loading={loading}
-              onEdit={handleEditTask}
-              onDelete={handleDeleteTask}
-              onComplete={handleCompleteTask}
-            />
-          </TabsContent>
-
-          <TabsContent value="recurring" className="p-6">
-            <TaskList
-              tasks={tasks}
-              loading={loading}
-              onEdit={handleEditTask}
-              onDelete={handleDeleteTask}
-              onComplete={handleCompleteTask}
-            />
-          </TabsContent>
-
-          <TabsContent value="completed" className="p-6">
-            <TaskList
-              tasks={tasks}
-              loading={loading}
-              onEdit={handleEditTask}
-              onDelete={handleDeleteTask}
-              onComplete={handleCompleteTask}
-            />
-          </TabsContent>
-        </Tabs>
+      <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+        <TaskList
+          tasks={allTasks.filter(
+            (task) =>
+              // Don't show recurring instances
+              !(task.task_type === "recurring" && task.recurring_event_id)
+          )}
+          recurringEvents={recurringEvents}
+          loading={loading || loadingRecurringEvents}
+          onEdit={handleEditTask}
+          onEditRecurringEvent={handleRecurringEventEdit}
+          onDelete={handleDeleteTask}
+          onDeleteRecurringEvent={handleDeleteRecurringEvent}
+          onComplete={handleCompleteTask}
+          onResetRecurringEventTasks={handleResetRecurringEventTasks}
+          showRecurringEvents={true}
+        />
       </div>
 
-      {/* Task Form Modal */}
-      <TaskForm
-        open={isFormOpen}
-        onClose={handleFormClose}
-        onSubmit={handleTaskFormSubmit}
-        initialData={selectedTask}
-        availableTasks={tasks.filter(
-          (task) =>
-            task.task_type === "one-off" &&
-            !task.is_completed &&
-            (!selectedTask || task.id !== selectedTask.id)
-        )}
-      />
+      {isFormOpen && (
+        <TaskForm
+          open={isFormOpen}
+          onClose={handleFormClose}
+          onSubmit={handleTaskFormSubmit}
+          initialData={
+            selectedRecurringEvent
+              ? eventToTaskForm(selectedRecurringEvent)
+              : selectedTask
+          }
+          availableTasks={allTasks.filter(
+            (task) =>
+              // Filter out completed tasks and the currently selected task
+              !task.is_completed &&
+              task.id !== selectedTask?.id &&
+              // Only allow one-off tasks as dependencies
+              (!task.recurrence || task.recurrence.length === 0)
+          )}
+        />
+      )}
     </div>
   );
 };

@@ -16,7 +16,7 @@ interface CalendarHeaderProps {
     message?: string;
   }>;
   onGenerateSchedule: () => Promise<boolean>;
-  onClearAllTasks: () => Promise<void>;
+  onClearScheduleData: () => Promise<void>;
   isSyncing: boolean;
   isGenerating: boolean;
   lastSyncTime: Date | null;
@@ -30,7 +30,7 @@ const CalendarHeader = ({
   onToday,
   onSync,
   onGenerateSchedule,
-  onClearAllTasks,
+  onClearScheduleData,
   isSyncing,
   lastSyncTime,
 }: CalendarHeaderProps) => {
@@ -93,12 +93,12 @@ const CalendarHeader = ({
           lastSyncTime={lastSyncTime}
         />
         <Button
-          onClick={onClearAllTasks}
+          onClick={onClearScheduleData}
           variant="outline"
           size="sm"
           className="px-3 py-1 text-sm"
         >
-          Clear All Scheduled Tasks
+          Clear Schedule Data
         </Button>
       </div>
     </div>

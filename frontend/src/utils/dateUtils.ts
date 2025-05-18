@@ -1,4 +1,5 @@
 import {
+  addDays,
   eachDayOfInterval,
   format,
   getHours,
@@ -56,6 +57,10 @@ export const dateUtils = {
   getNow: (): Date => {
     // Return the current date in local timezone
     return new Date();
+  },
+
+  addDays: (date: Date, days: number): Date => {
+    return addDays(date, days);
   },
 };
 

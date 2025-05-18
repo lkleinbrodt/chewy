@@ -114,6 +114,33 @@ export function useTasks(initialFilters: TaskFilters = {}) {
    */
   const clearError = () => setError(null);
 
+  /**
+   * Manually set the tasks state with converted dates
+   */
+  const setTasksManually = useCallback((newTasks: Task[]) => {
+    setTasks(
+      newTasks.map((task) => {
+        const processedTask = {
+          ...task,
+          start: task.start ? new Date(task.start) : undefined,
+          end: task.end ? new Date(task.end) : undefined,
+        };
+
+        // // Handle one-off tasks by ensuring due_by is a string (as required by the type)
+        // if (task.task_type === "one-off") {
+        //   return {
+        //     ...processedTask,
+        //     due_by: task.due_by, // Keep as string as expected by OneOffTask
+        //   };
+        // }
+
+        return processedTask;
+      }) as Task[]
+    );
+    setLoading(false);
+    setError(null);
+  }, []);
+
   return {
     tasks,
     loading,
@@ -126,5 +153,6 @@ export function useTasks(initialFilters: TaskFilters = {}) {
     deleteTask,
     completeTask,
     refreshTasks: fetchTasks,
+    setTasksManually,
   };
 }

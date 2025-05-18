@@ -7,7 +7,6 @@ import {
   CommandInput,
   CommandItem,
 } from "@/components/ui/command";
-import type { OneOffTask, Task } from "@/types/task";
 import {
   Popover,
   PopoverContent,
@@ -16,19 +15,20 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import type { Task } from "@/types/task";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { wouldCreateCircularDependency } from "@/utils/taskUtils";
 
 interface DependencySelectorProps {
-  selectedDependencies: string[];
+  selectedTaskIds: string[];
   onChange: (dependencies: string[]) => void;
   availableTasks: Task[];
   currentTaskId?: string; // To avoid circular dependencies
 }
 
 const DependencySelector = ({
-  selectedDependencies,
+  selectedTaskIds,
   onChange,
   availableTasks,
   currentTaskId,
@@ -38,8 +38,8 @@ const DependencySelector = ({
 
   // Filter out completed tasks, the current task, and already selected tasks
   const filteredTasks = availableTasks.filter((task) => {
-    // Only one-off tasks can be dependencies
-    if (task.task_type !== "one-off") return false;
+    // Only one-off tasks can be dependencies (no recurrence or empty recurrence)
+    if (task.recurrence && task.recurrence.length > 0) return false;
 
     // Don't include the current task
     if (currentTaskId && task.id === currentTaskId) return false;
@@ -48,16 +48,17 @@ const DependencySelector = ({
     if (task.is_completed) return false;
 
     // Don't show already selected dependencies in the dropdown
-    if (selectedDependencies.includes(task.id)) return false;
+    if (selectedTaskIds.includes(task.id)) return false;
 
     return true;
-  }) as OneOffTask[]; // Safe to cast since we filtered to only one-off tasks
+  });
 
   // Get the task objects for the selected dependencies
   const selectedTasks = availableTasks.filter(
     (task) =>
-      selectedDependencies.includes(task.id) && task.task_type === "one-off"
-  ) as OneOffTask[]; // Safe to cast since we filtered to only one-off tasks
+      selectedTaskIds.includes(task.id) &&
+      (!task.recurrence || task.recurrence.length === 0)
+  );
 
   const handleSelect = (taskId: string) => {
     // Check for circular dependencies
@@ -72,14 +73,14 @@ const DependencySelector = ({
     }
 
     // Add the task to the selected dependencies
-    onChange([...selectedDependencies, taskId]);
+    onChange([...selectedTaskIds, taskId]);
     setValidationError(null);
     setOpen(false);
   };
 
   const handleRemove = (taskId: string) => {
     // Remove the task from the selected dependencies
-    onChange(selectedDependencies.filter((id) => id !== taskId));
+    onChange(selectedTaskIds.filter((id) => id !== taskId));
     setValidationError(null);
   };
 
@@ -144,7 +145,7 @@ const DependencySelector = ({
                     <Check
                       className={cn(
                         "mr-2 h-4 w-4",
-                        selectedDependencies.includes(task.id)
+                        selectedTaskIds.includes(task.id)
                           ? "opacity-100"
                           : "opacity-0"
                       )}
@@ -152,7 +153,10 @@ const DependencySelector = ({
                     <div className="flex flex-col">
                       <span>{task.content}</span>
                       <span className="text-xs text-gray-500">
-                        Due: {new Date(task.due_by).toLocaleDateString()}
+                        Due:{" "}
+                        {task.due_by
+                          ? new Date(task.due_by).toLocaleDateString()
+                          : "No due date"}
                       </span>
                     </div>
                   </CommandItem>

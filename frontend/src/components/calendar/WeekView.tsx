@@ -2,23 +2,24 @@ import { getEventsForDay, getWeekDays } from "@/utils/dateUtils";
 
 import type { CalendarEvent } from "@/types/calendar";
 import DayColumn from "./DayColumn";
-import type { ScheduledTask } from "@/types/schedule";
+import type { Task } from "@/types/task";
 import TimeGrid from "./TimeGrid";
 import { appConfig } from "@/constants/appConfig";
+import { isSameDay } from "date-fns";
 
 interface WeekViewProps {
   startDate: Date;
   events: CalendarEvent[];
-  scheduledTasks?: ScheduledTask[];
+  tasksToDisplayOnCalendar?: Task[];
   loading: boolean;
   onEventClick: (event: CalendarEvent) => void;
-  onTaskClick?: (task: ScheduledTask) => void;
+  onTaskClick?: (task: Task) => void;
 }
 
 const WeekView = ({
   startDate,
   events,
-  scheduledTasks = [],
+  tasksToDisplayOnCalendar = [],
   loading,
   onEventClick,
   onTaskClick,
@@ -52,7 +53,9 @@ const WeekView = ({
     });
 
     // Also check scheduled tasks
-    scheduledTasks.forEach((task) => {
+    tasksToDisplayOnCalendar.forEach((task) => {
+      if (!task.start || !task.end) return;
+
       const taskStart = new Date(task.start);
       const taskEnd = new Date(task.end);
 
@@ -79,18 +82,12 @@ const WeekView = ({
   const weekDays = getWeekDays(startDate);
 
   // Function to get scheduled tasks for a specific day
-  const getTasksForDay = (tasks: ScheduledTask[], date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const day = date.getDate();
-
+  const getTasksForDay = (tasks: Task[], date: Date): Task[] => {
     return tasks.filter((task) => {
-      const taskDate = new Date(task.start);
-      return (
-        taskDate.getFullYear() === year &&
-        taskDate.getMonth() === month &&
-        taskDate.getDate() === day
-      );
+      if (!task.start) return false; // Only consider tasks that have a start time
+      const taskStartDate =
+        typeof task.start === "string" ? new Date(task.start) : task.start;
+      return isSameDay(taskStartDate, date);
     });
   };
 
@@ -106,7 +103,7 @@ const WeekView = ({
               key={day.toString()}
               date={day}
               events={[]}
-              scheduledTasks={[]}
+              tasksToDisplayOnCalendar={[]}
               onEventClick={() => {}}
               onTaskClick={() => {}}
               startHour={displayStartHour}
@@ -130,7 +127,10 @@ const WeekView = ({
             key={day.toString()}
             date={day}
             events={getEventsForDay(events, day)}
-            scheduledTasks={getTasksForDay(scheduledTasks, day)}
+            tasksToDisplayOnCalendar={getTasksForDay(
+              tasksToDisplayOnCalendar,
+              day
+            )}
             onEventClick={onEventClick}
             onTaskClick={onTaskClick}
             startHour={displayStartHour}

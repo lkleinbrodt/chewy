@@ -55,3 +55,6 @@ class TestingConfig(Config):
     ENV = "testing"
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+
+    WORK_START_HOUR = 9
+    WORK_END_HOUR = 17

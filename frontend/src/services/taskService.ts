@@ -1,9 +1,8 @@
 import type {
-  OneOffTaskFormData,
-  RecurringTaskFormData,
   Task,
   TaskCreationResponse,
   TaskFilters,
+  TaskFormData,
 } from "@/types/task";
 
 import axiosInstance from "@/utils/axiosInstance";
@@ -37,9 +36,7 @@ const taskService = {
   /**
    * Create a new task
    */
-  createTask: async (
-    taskData: OneOffTaskFormData | RecurringTaskFormData
-  ): Promise<TaskCreationResponse> => {
+  createTask: async (taskData: TaskFormData): Promise<TaskCreationResponse> => {
     const formattedData = formatTaskForApi(taskData);
     const response = await axiosInstance.post("/tasks", formattedData);
     return response.data;
@@ -50,7 +47,7 @@ const taskService = {
    */
   updateTask: async (
     taskId: string,
-    taskData: OneOffTaskFormData | RecurringTaskFormData
+    taskData: TaskFormData
   ): Promise<{ message: string }> => {
     const formattedData = formatTaskForApi(taskData);
     const response = await axiosInstance.put(`/tasks/${taskId}`, formattedData);

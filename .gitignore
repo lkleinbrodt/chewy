@@ -1,3 +1,4 @@
+.cursor/
 flask_session/
 app.db
 calendar_data/*

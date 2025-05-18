@@ -8,6 +8,9 @@ import {
   navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu";
 
+// TODO: Fix issue where the active tab selection is lost on page refresh
+// Currently, the index route should show Tasks as selected but this doesn't persist on refresh
+
 const Header = () => {
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 mb-1">

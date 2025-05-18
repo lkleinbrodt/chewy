@@ -1,36 +1,34 @@
-import type {
-  OneOffTask,
-  OneOffTaskFormData,
-  RecurringTask,
-  RecurringTaskFormData,
-  Task,
-} from "@/types/task";
+import type { Task, TaskFormData } from "@/types/task";
 
 /**
  * Convert form data to API format
  */
-export const formatTaskForApi = (
-  formData: OneOffTaskFormData | RecurringTaskFormData
-) => {
-  if (formData.task_type === "one-off") {
-    // Create a copy of the due_by date for manipulation
-    const dueDate = new Date(formData.due_by);
+export const formatTaskForApi = (formData: TaskFormData) => {
+  const isRecurring =
+    formData.is_recurring_ui_flag ||
+    (formData.recurrence_days && formData.recurrence_days.length > 0);
 
-    // If the user did not include a specific time, set it to 12:01 AM (already set in the form)
-    // The date is in local time, so convert to UTC for the backend
+  // Common fields
+  const commonFields = {
+    content: formData.content,
+    duration: Number(formData.duration),
+    ...(formData.status && { status: formData.status }),
+    ...(formData.start && {
+      start:
+        formData.start instanceof Date
+          ? formData.start.toISOString()
+          : formData.start,
+    }),
+    ...(formData.end && {
+      end:
+        formData.end instanceof Date
+          ? formData.end.toISOString()
+          : formData.end,
+    }),
+  };
 
-    return {
-      content: formData.content,
-      duration: Number(formData.duration),
-      dependencies: formData.dependencies || [],
-      due_by: dueDate.toISOString(), // This automatically converts to UTC
-      task_type: "one-off" as const,
-      is_completed: formData.is_completed || false,
-      time_window_start: formData.time_window_start || null,
-      time_window_end: formData.time_window_end || null,
-    };
-  } else {
-    // Recurring task
+  if (isRecurring) {
+    // Handle recurring task fields
     let time_window_start: string | null = null;
     let time_window_end: string | null = null;
 
@@ -64,13 +62,24 @@ export const formatTaskForApi = (
     }
 
     return {
-      content: formData.content,
-      duration: Number(formData.duration),
-      task_type: "recurring" as const,
-      recurrence: formData.recurrence,
+      ...commonFields,
+      recurrence: formData.recurrence_days || [],
       time_window_start,
       time_window_end,
-      is_active: formData.is_active || true,
+      due_by: null,
+      dependencies: [],
+    };
+  } else {
+    // Handle one-off task fields
+    const dueDate = formData.due_by instanceof Date ? formData.due_by : null;
+
+    return {
+      ...commonFields,
+      dependencies: formData.dependencies || [],
+      due_by: dueDate?.toISOString() || null,
+      recurrence: [],
+      time_window_start: null,
+      time_window_end: null,
     };
   }
 };
@@ -78,46 +87,28 @@ export const formatTaskForApi = (
 /**
  * Format API data for form
  */
-export const formatTaskForForm = (
-  apiData: Task
-): OneOffTaskFormData | RecurringTaskFormData => {
+export const formatTaskForForm = (apiData: Task): TaskFormData => {
+  // Common fields
   const commonFields = {
-    id: apiData.id,
     content: apiData.content,
     duration: apiData.duration,
-    task_type: apiData.task_type,
+    is_completed: apiData.is_completed,
     time_window_start: apiData.time_window_start,
     time_window_end: apiData.time_window_end,
+    start: apiData.start,
+    end: apiData.end,
   };
 
-  if (apiData.task_type === "one-off") {
-    const oneOffTask = apiData as OneOffTask;
-    const dueByDate = new Date(oneOffTask.due_by);
-    // Check if time is set to anything other than around midnight (allowing for small variations)
-    const hasSpecificTime =
-      dueByDate.getHours() !== 0 || dueByDate.getMinutes() > 5;
+  const isRecurring = apiData.recurrence && apiData.recurrence.length > 0;
 
-    return {
-      ...commonFields,
-      task_type: "one-off" as const,
-      dependencies: oneOffTask.dependencies || [],
-      due_by: dueByDate,
-      include_time: hasSpecificTime,
-      is_completed: oneOffTask.is_completed || false,
-    };
-  } else {
-    // Recurring task
-    const recurringTask = apiData as RecurringTask;
-
+  if (isRecurring) {
     // Convert UTC time strings back to local time
     let localTimeWindowStart = "";
     let localTimeWindowEnd = "";
 
-    if (recurringTask.time_window_start) {
+    if (apiData.time_window_start) {
       // Parse UTC time string and convert to local time
-      const [hours, minutes] = recurringTask.time_window_start
-        .split(":")
-        .map(Number);
+      const [hours, minutes] = apiData.time_window_start.split(":").map(Number);
       const date = new Date();
       // Set hours and minutes in UTC
       date.setUTCHours(hours, minutes, 0, 0);
@@ -130,11 +121,9 @@ export const formatTaskForForm = (
         .padStart(2, "0")}:${localMinutes.toString().padStart(2, "0")}`;
     }
 
-    if (recurringTask.time_window_end) {
+    if (apiData.time_window_end) {
       // Parse UTC time string and convert to local time
-      const [hours, minutes] = recurringTask.time_window_end
-        .split(":")
-        .map(Number);
+      const [hours, minutes] = apiData.time_window_end.split(":").map(Number);
       const date = new Date();
       // Set hours and minutes in UTC
       date.setUTCHours(hours, minutes, 0, 0);
@@ -149,11 +138,25 @@ export const formatTaskForForm = (
 
     return {
       ...commonFields,
-      task_type: "recurring" as const,
-      recurrence: recurringTask.recurrence,
-      time_window_start: localTimeWindowStart,
-      time_window_end: localTimeWindowEnd,
-      is_active: recurringTask.is_active || true,
+      is_recurring_ui_flag: true,
+      recurrence_days: apiData.recurrence || [],
+      time_window_start: localTimeWindowStart || null,
+      time_window_end: localTimeWindowEnd || null,
+    };
+  } else {
+    // One-off task
+    const dueByDate = apiData.due_by ? new Date(apiData.due_by) : null;
+    // Check if time is set to anything other than around midnight (allowing for small variations)
+    const hasSpecificTime = dueByDate
+      ? dueByDate.getHours() !== 0 || dueByDate.getMinutes() > 5
+      : false;
+
+    return {
+      ...commonFields,
+      is_recurring_ui_flag: false,
+      dependencies: apiData.dependencies || [],
+      due_by: dueByDate,
+      include_time: hasSpecificTime,
     };
   }
 };
@@ -162,11 +165,7 @@ export const formatTaskForForm = (
  * Check if a task is blocked by incomplete dependencies
  */
 export const isTaskBlocked = (task: Task, allTasks: Task[]): boolean => {
-  if (
-    task.task_type !== "one-off" ||
-    !task.dependencies ||
-    task.dependencies.length === 0
-  ) {
+  if (!task.dependencies || task.dependencies.length === 0) {
     return false;
   }
 
@@ -190,11 +189,11 @@ export const getTaskStatus = (
     return { label: "Completed", color: "bg-green-400" };
   }
 
-  if (task.task_type === "one-off") {
-    if (isTaskBlocked(task, allTasks)) {
-      return { label: "Blocked", color: "bg-amber-400" };
-    }
+  if (isTaskBlocked(task, allTasks)) {
+    return { label: "Blocked", color: "bg-amber-400" };
+  }
 
+  if (task.due_by) {
     const dueDate = new Date(task.due_by);
     const today = new Date();
 
@@ -203,7 +202,7 @@ export const getTaskStatus = (
     }
   }
 
-  if (task.task_type === "recurring") {
+  if (task.recurrence && task.recurrence.length > 0) {
     return { label: "Recurring", color: "bg-primary-light" };
   }
 
@@ -227,107 +226,60 @@ export const formatDuration = (minutes: number): string => {
 };
 
 /**
- * Format due date or recurrence pattern to human-readable string
+ * Format task schedule information
  */
 export const formatTaskSchedule = (task: Task): string => {
-  if (task.task_type === "one-off") {
-    return new Date(task.due_by).toLocaleDateString();
-  } else {
-    const { recurrence } = task;
+  const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-    if (recurrence.type === "daily") {
-      return "Daily";
-    } else if (recurrence.type === "weekly") {
-      return "Weekly";
-    } else if (recurrence.type === "custom" && recurrence.days) {
-      const dayMap: Record<string, string> = {
-        mon: "Monday",
-        tue: "Tuesday",
-        wed: "Wednesday",
-        thu: "Thursday",
-        fri: "Friday",
-        sat: "Saturday",
-        sun: "Sunday",
-      };
-
-      return recurrence.days.map((day) => dayMap[day] || day).join(", ");
-    }
-
-    return "Custom schedule";
+  if (task.recurrence && task.recurrence.length > 0) {
+    if (task.recurrence.length === 7) return "Daily";
+    return task.recurrence.map((dayIndex) => daysOfWeek[dayIndex]).join(", ");
   }
+
+  return task.due_by ? new Date(task.due_by).toLocaleDateString() : "N/A";
 };
 
 /**
- * Check for circular dependencies
- * Returns true if adding the dependency would create a circular reference
+ * Check if adding a dependency would create a circular dependency
  */
 export const wouldCreateCircularDependency = (
   taskId: string,
   dependencyId: string,
   allTasks: Task[]
 ): boolean => {
-  // If we're trying to make a task depend on itself, that's circular
-  if (taskId === dependencyId) return true;
+  const visited = new Set<string>();
+  return checkForCircularPath(dependencyId, [taskId], allTasks, visited);
+};
 
-  // Find the dependency task
-  const dependencyTask = allTasks.find((t) => t.id === dependencyId);
+/**
+ * Helper function to check for circular dependencies
+ */
+const checkForCircularPath = (
+  currentTaskId: string,
+  targetTaskIds: string[],
+  allTasks: Task[],
+  visited: Set<string>
+): boolean => {
+  if (targetTaskIds.includes(currentTaskId)) {
+    return true;
+  }
 
-  // If dependency doesn't exist or isn't a one-off task, no circular dependency
-  if (!dependencyTask || dependencyTask.task_type !== "one-off") return false;
+  if (visited.has(currentTaskId)) {
+    return false;
+  }
 
-  // If the dependency has no dependencies of its own, no circular dependency
+  visited.add(currentTaskId);
+
+  const currentTask = allTasks.find((task) => task.id === currentTaskId);
   if (
-    !dependencyTask.dependencies ||
-    dependencyTask.dependencies.length === 0
+    !currentTask ||
+    !currentTask.dependencies ||
+    currentTask.dependencies.length === 0
   ) {
     return false;
   }
 
-  // Check if any of the dependency's dependencies would create a circular reference
-  return checkForCircularPath(
-    taskId,
-    dependencyTask.dependencies,
-    allTasks,
-    new Set()
+  return currentTask.dependencies.some((depId) =>
+    checkForCircularPath(depId, targetTaskIds, allTasks, visited)
   );
-};
-
-/**
- * Helper function to check for circular paths in dependencies
- */
-const checkForCircularPath = (
-  originalTaskId: string,
-  dependencies: string[],
-  allTasks: Task[],
-  visited: Set<string>
-): boolean => {
-  for (const depId of dependencies) {
-    // If we've seen this task before in this path, we have a cycle
-    if (visited.has(depId)) continue;
-
-    // If the dependency is the original task, we have a cycle
-    if (depId === originalTaskId) return true;
-
-    // Find this dependency
-    const depTask = allTasks.find((t) => t.id === depId);
-    if (!depTask || depTask.task_type !== "one-off") continue;
-
-    // If this dependency has its own dependencies, check those too
-    if (depTask.dependencies && depTask.dependencies.length > 0) {
-      const newVisited = new Set(visited);
-      newVisited.add(depId);
-      if (
-        checkForCircularPath(
-          originalTaskId,
-          depTask.dependencies,
-          allTasks,
-          newVisited
-        )
-      ) {
-        return true;
-      }
-    }
-  }
-
-  return false;
 };

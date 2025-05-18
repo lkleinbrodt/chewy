@@ -38,6 +38,26 @@ class RecurringEvent(db.Model):
             f"<RecurringEvent {self.id}: {self.content}, Recurrence: {self.recurrence}>"
         )
 
+    def to_dict(self):
+        """Convert recurring event to a dictionary for API serialization"""
+        return {
+            "id": self.id,
+            "content": self.content,
+            "duration": self.duration,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "time_window_start": (
+                self.time_window_start.strftime("%H:%M")
+                if self.time_window_start
+                else None
+            ),
+            "time_window_end": (
+                self.time_window_end.strftime("%H:%M") if self.time_window_end else None
+            ),
+            "recurrence": self.recurrence,
+            "tasks": [task.id for task in self.tasks] if self.tasks else [],
+        }
+
     def create_tasks(self, start_date, end_date):
         logger.debug(f"Creating tasks for recurring event {self.id}")
         # for each day in the recurrence, create a task
@@ -53,7 +73,6 @@ class RecurringEvent(db.Model):
                     content=self.content,
                     duration=self.duration,
                     due_by=due_by,
-                    task_type="recurring",
                     recurring_event_id=self.id,
                     time_window_start=self.time_window_start,
                     time_window_end=self.time_window_end,
@@ -140,7 +159,7 @@ class Task(db.Model):
         self.status = "completed"
 
     def to_dict(self):
-        return {
+        result = {
             "id": self.id,
             "content": self.content,
             "start": (
@@ -171,6 +190,26 @@ class Task(db.Model):
                 else []
             ),
         }
+
+        # Include recurring event information if this is a recurring task
+        if self.recurring_event_id and self.recurring_event:
+            result["recurring_event"] = {
+                "id": self.recurring_event.id,
+                "content": self.recurring_event.content,
+                "recurrence": self.recurring_event.recurrence,
+                "time_window_start": (
+                    self.recurring_event.time_window_start.isoformat()
+                    if self.recurring_event.time_window_start
+                    else None
+                ),
+                "time_window_end": (
+                    self.recurring_event.time_window_end.isoformat()
+                    if self.recurring_event.time_window_end
+                    else None
+                ),
+            }
+
+        return result
 
 
 class TaskDependency(db.Model):

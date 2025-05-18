@@ -1,4 +1,4 @@
-import type { ScheduledTask } from "@/types/schedule";
+import type { Task } from "@/types/task";
 import axiosInstance from "@/utils/axiosInstance";
 
 /**
@@ -6,24 +6,22 @@ import axiosInstance from "@/utils/axiosInstance";
  */
 const scheduleService = {
   /**
-   * Generate a new schedule for the given date range
+   * Generate a new schedule
+   * Calls the API to update tasks with start and end times
    */
-  generateSchedule: async (
-    startDate: Date,
-    endDate: Date
-  ): Promise<ScheduledTask[]> => {
+  generateSchedule: async (): Promise<Task[]> => {
     try {
-      const response = await axiosInstance.post("/schedule/generate", {
-        start_date: startDate.toISOString(),
-        end_date: endDate.toISOString(),
+      const response = await axiosInstance.post("/schedule", {
+        start_date: new Date().toISOString(),
+        end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
       });
 
-      // Convert UTC dates from backend to local timezone
-      return response.data.scheduled_tasks.map((task: ScheduledTask) => ({
+      // Convert string dates to Date objects
+      return response.data.tasks.map((task: Task) => ({
         ...task,
-        start: new Date(task.start), // JS Date constructor automatically converts to local timezone
-        end: new Date(task.end), // JS Date constructor automatically converts to local timezone
-      }));
+        start: task.start ? new Date(task.start) : undefined,
+        end: task.end ? new Date(task.end) : undefined,
+      })) as Task[];
     } catch (error) {
       console.error("Error generating schedule:", error);
       throw error;
@@ -31,68 +29,14 @@ const scheduleService = {
   },
 
   /**
-   * Get schedule for a date range
+   * Clear schedule data from all tasks
    */
-  getSchedule: async (
-    startDate: Date,
-    endDate: Date
-  ): Promise<ScheduledTask[]> => {
-    try {
-      const response = await axiosInstance.get("/schedule", {
-        params: {
-          start_date: startDate.toISOString(),
-          end_date: endDate.toISOString(),
-        },
-      });
-
-      // Convert UTC dates from backend to local timezone
-      return response.data.map((task: ScheduledTask) => ({
-        ...task,
-        start: new Date(task.start), // JS Date constructor automatically converts to local timezone
-        end: new Date(task.end), // JS Date constructor automatically converts to local timezone
-      }));
-    } catch (error) {
-      console.error("Error fetching schedule:", error);
-      throw error;
-    }
-  },
-
-  /**
-   * Update a scheduled task
-   */
-  updateScheduledTask: async (
-    scheduledTaskId: string,
-    updateData: {
-      start?: Date;
-      end?: Date;
-      status?: string;
-    }
-  ): Promise<{ message: string }> => {
-    try {
-      // Convert dates to ISO strings if present
-      const formattedData = {
-        ...updateData,
-        start: updateData.start?.toISOString(), // This preserves timezone info
-        end: updateData.end?.toISOString(), // This preserves timezone info
-      };
-
-      const response = await axiosInstance.put(
-        `/schedule/tasks/${scheduledTaskId}`,
-        formattedData
-      );
-      return response.data;
-    } catch (error) {
-      console.error("Error updating scheduled task:", error);
-      throw error;
-    }
-  },
-
-  clearAllScheduledTasks: async (): Promise<{ message: string }> => {
+  clearScheduleDataFromTasks: async (): Promise<{ message: string }> => {
     try {
       const response = await axiosInstance.delete("/schedule/clear");
       return response.data;
     } catch (error) {
-      console.error("Error clearing scheduled tasks:", error);
+      console.error("Error clearing schedule data from tasks:", error);
       throw error;
     }
   },

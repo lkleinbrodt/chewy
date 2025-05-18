@@ -2,7 +2,7 @@ import { calculateEventPosition, dateUtils } from "@/utils/dateUtils";
 
 import type { CalendarEvent } from "@/types/calendar";
 import EventBlock from "./EventBlock";
-import type { ScheduledTask } from "@/types/schedule";
+import type { Task } from "@/types/task";
 import TaskBlock from "../calendar/TaskBlock";
 import { appConfig } from "@/constants/appConfig";
 import { cn } from "@/lib/utils";
@@ -11,9 +11,9 @@ import { isToday } from "date-fns";
 interface DayColumnProps {
   date: Date;
   events: CalendarEvent[];
-  scheduledTasks?: ScheduledTask[];
+  tasksToDisplayOnCalendar?: Task[];
   onEventClick: (event: CalendarEvent) => void;
-  onTaskClick?: (task: ScheduledTask) => void;
+  onTaskClick?: (task: Task) => void;
   startHour?: number;
   endHour?: number;
 }
@@ -21,7 +21,7 @@ interface DayColumnProps {
 const DayColumn = ({
   date,
   events,
-  scheduledTasks = [],
+  tasksToDisplayOnCalendar = [],
   onEventClick,
   onTaskClick,
   startHour: propStartHour,
@@ -78,29 +78,31 @@ const DayColumn = ({
   });
 
   // Position scheduled tasks within the day column
-  const taskBlocks = scheduledTasks.map((task) => {
-    // Calculate position using the same utility as events
-    const position = calculateEventPosition(
-      {
-        start:
-          typeof task.start === "string"
-            ? task.start
-            : task.start.toISOString(),
-        end: typeof task.end === "string" ? task.end : task.end.toISOString(),
-      },
-      workStartHour,
-      workEndHour
-    );
+  const taskBlocks = tasksToDisplayOnCalendar
+    .map((task) => {
+      // Skip tasks without start or end times
+      if (!task.start || !task.end) return null;
 
-    return (
-      <TaskBlock
-        key={task.id}
-        task={task}
-        onClick={onTaskClick}
-        style={position}
-      />
-    );
-  });
+      // Calculate position using the same utility as events
+      const position = calculateEventPosition(
+        {
+          start: task.start,
+          end: task.end,
+        },
+        workStartHour,
+        workEndHour
+      );
+
+      return (
+        <TaskBlock
+          key={task.id}
+          task={task}
+          onClick={onTaskClick}
+          style={position}
+        />
+      );
+    })
+    .filter(Boolean); // Filter out null values
 
   const dayIsToday = isToday(date);
   const now = dateUtils.getNow();
