@@ -124,15 +124,19 @@ def sync_calendar():
 
                     # Parse dates with timezone conversion
                     # Prioritize using the fields with timezone information
+                    raw_start_obj = event_data["start"]
+                    start_str = raw_start_obj.get("dateTime", raw_start_obj.get("date"))
                     if "startWithTimeZone" in event_data:
                         start_time = parse_iso_datetime(event_data["startWithTimeZone"])
                     else:
-                        start_time = parse_iso_datetime(event_data["start"])
+                        start_time = parse_iso_datetime(start_str)
 
+                    raw_end_obj = event_data["end"]
+                    end_str = raw_end_obj.get("dateTime", raw_end_obj.get("date"))
                     if "endWithTimeZone" in event_data:
                         end_time = parse_iso_datetime(event_data["endWithTimeZone"])
                     else:
-                        end_time = parse_iso_datetime(event_data["end"])
+                        end_time = parse_iso_datetime(end_str)
 
                     if not start_time or not end_time:
                         continue

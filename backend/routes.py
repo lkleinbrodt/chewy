@@ -394,10 +394,13 @@ def generate_new_schedule():
 def get_calendar_directory():
     """Get the current calendar directory setting"""
     calendar_dir = get_calendar_dir()
+    is_set = calendar_dir is not None
+    exists = os.path.exists(calendar_dir) if calendar_dir else False
     return jsonify(
         {
-            "calendar_dir": calendar_dir,
-            "is_set": calendar_dir is not None and os.path.exists(calendar_dir),
+            "calendar_dir": calendar_dir, # Key used by frontend
+            "is_set": is_set,
+            "exists": exists,
         }
     )
 
