@@ -1,0 +1,49 @@
+# Track data directories but not their contents
+data/calendar/*
+!data/calendar/.gitkeep
+data/export/*
+!data/export/.gitkeep
+
+.cursor/
+flask_session/
+app.db
+calendar_data/*
+
+.specstory/
+node_modules/
+dist/
+npm-debug.log
+yarn-error.log
+.DS_Store
+
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# SpecStory explanation file
+.specstory/.what-is-this.md
+
+# Chewbacca-specific files
+_settings.json

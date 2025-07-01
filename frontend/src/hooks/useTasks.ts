@@ -1,0 +1,157 @@
+import type {
+  Task,
+  TaskCreationResponse,
+  TaskFilters,
+  TaskFormData,
+} from "@/types/task";
+import { useCallback, useEffect, useState } from "react";
+
+import type { ApiErrorResponse } from "@/utils/errorUtils";
+import { handleApiErrorWithToast } from "@/utils/errorUtils";
+import taskService from "@/services/taskService";
+
+/**
+ * Custom hook for managing tasks
+ * Provides state and operations for tasks with loading and error handling
+ */
+export function useTasks(initialFilters: TaskFilters = {}) {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<ApiErrorResponse | null>(null);
+  const [filters, setFilters] = useState<TaskFilters>(initialFilters);
+
+  /**
+   * Fetch tasks based on current filters
+   */
+  const fetchTasks = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await taskService.getTasks(filters);
+      setTasks(data);
+    } catch (err) {
+      const apiError = handleApiErrorWithToast(err, "fetching tasks");
+      setError(apiError);
+      console.error("Error fetching tasks:", apiError.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]);
+
+  // Fetch tasks when component mounts or filters change
+  useEffect(() => {
+    fetchTasks();
+  }, [fetchTasks]);
+
+  /**
+   * Create a new task
+   */
+  const createTask = async (
+    taskData: TaskFormData
+  ): Promise<TaskCreationResponse> => {
+    try {
+      const result = await taskService.createTask(taskData);
+      fetchTasks(); // Refresh task list
+      return result;
+    } catch (err) {
+      const apiError = handleApiErrorWithToast(err, "creating task");
+      setError(apiError);
+      throw apiError;
+    }
+  };
+
+  /**
+   * Update an existing task
+   */
+  const updateTask = async (
+    taskId: string,
+    taskData: TaskFormData
+  ): Promise<{ message: string }> => {
+    try {
+      const result = await taskService.updateTask(taskId, taskData);
+      fetchTasks(); // Refresh task list
+      return result;
+    } catch (err) {
+      const apiError = handleApiErrorWithToast(err, "updating task");
+      setError(apiError);
+      throw apiError;
+    }
+  };
+
+  /**
+   * Delete a task
+   */
+  const deleteTask = async (taskId: string): Promise<{ message: string }> => {
+    try {
+      const result = await taskService.deleteTask(taskId);
+      fetchTasks(); // Refresh task list
+      return result;
+    } catch (err) {
+      const apiError = handleApiErrorWithToast(err, "deleting task");
+      setError(apiError);
+      throw apiError;
+    }
+  };
+
+  /**
+   * Mark a task as complete
+   */
+  const completeTask = async (taskId: string): Promise<{ message: string }> => {
+    try {
+      const result = await taskService.completeTask(taskId);
+      fetchTasks(); // Refresh task list
+      return result;
+    } catch (err) {
+      const apiError = handleApiErrorWithToast(err, "completing task");
+      setError(apiError);
+      throw apiError;
+    }
+  };
+
+  /**
+   * Clear current error
+   */
+  const clearError = () => setError(null);
+
+  /**
+   * Manually set the tasks state with converted dates
+   */
+  const setTasksManually = useCallback((newTasks: Task[]) => {
+    setTasks(
+      newTasks.map((task) => {
+        const processedTask = {
+          ...task,
+          start: task.start ? new Date(task.start) : undefined,
+          end: task.end ? new Date(task.end) : undefined,
+        };
+
+        // // Handle one-off tasks by ensuring due_by is a string (as required by the type)
+        // if (task.task_type === "one-off") {
+        //   return {
+        //     ...processedTask,
+        //     due_by: task.due_by, // Keep as string as expected by OneOffTask
+        //   };
+        // }
+
+        return processedTask;
+      }) as Task[]
+    );
+    setLoading(false);
+    setError(null);
+  }, []);
+
+  return {
+    tasks,
+    loading,
+    error,
+    clearError,
+    filters,
+    setFilters,
+    createTask,
+    updateTask,
+    deleteTask,
+    completeTask,
+    refreshTasks: fetchTasks,
+    setTasksManually,
+  };
+}
