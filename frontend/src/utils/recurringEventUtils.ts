@@ -108,6 +108,11 @@ export const formatTimeWindow = (
     return "Any time";
   }
 
+  // Convert UTC times to local times before formatting
+  const baseDate = dateUtils.getNow();
+  const localStartTime = utcTimeToLocal(startTime, baseDate);
+  const localEndTime = utcTimeToLocal(endTime, baseDate);
+
   // Format times to be more readable (HH:MM → h:mm AM/PM)
   const formatTimeString = (timeStr: string): string => {
     try {
@@ -120,5 +125,7 @@ export const formatTimeWindow = (
     }
   };
 
-  return `${formatTimeString(startTime)} - ${formatTimeString(endTime)}`;
+  return `${formatTimeString(localStartTime || startTime)} - ${formatTimeString(
+    localEndTime || endTime
+  )}`;
 };

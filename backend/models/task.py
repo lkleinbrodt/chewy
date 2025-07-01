@@ -58,21 +58,71 @@ class RecurringEvent(db.Model):
             "tasks": [task.id for task in self.tasks] if self.tasks else [],
         }
 
+    def _is_task_feasible_today(self, current_time: datetime) -> bool:
+        """
+        Check if a task can feasibly be completed today given the current time.
+
+        Args:
+            current_time: Current datetime to check against
+
+        Returns:
+            True if the task can be completed today, False otherwise
+        """
+        # If no time window is set, task is always feasible
+        if not self.time_window_start or not self.time_window_end:
+            return True
+
+        # Get current time as time object for comparison
+        current_time_only = current_time.time()
+
+        # Calculate the latest possible start time for the task
+        # Task duration is in minutes, so we need to subtract that from the end time
+        duration_timedelta = timedelta(minutes=self.duration)
+
+        # Convert time_window_end to datetime for calculation
+        today = current_time.date()
+        window_end_datetime = datetime.combine(today, self.time_window_end)
+
+        # Calculate the latest possible start time
+        latest_start_datetime = window_end_datetime - duration_timedelta
+        latest_start_time = latest_start_datetime.time()
+
+        # Check if current time is before the latest possible start time
+        # and after the time window start
+        if current_time_only < self.time_window_start:
+            # Current time is before the time window starts, so task is feasible
+            return True
+        elif current_time_only > latest_start_time:
+            # Current time is after the latest possible start time, task is not feasible
+            return False
+        else:
+            # Current time is within the feasible window
+            return True
+
     def create_tasks(self, start_date: datetime, end_date: datetime):
         logger.debug(f"Creating tasks for recurring event {self.id}")
         # for each day in the recurrence, create a task
         # do this by setting the instance_date to the day
         n_tasks_created = 0
 
-        # Get today's date to avoid creating tasks in the past
-        today = datetime.utcnow().date()
+        # Get current datetime to check both date and time feasibility
+        current_datetime = datetime.utcnow()
 
         # Start from the later of start_date or today
-        effective_start = max(start_date.date(), today)
+        effective_start = max(start_date.date(), current_datetime.date())
         day_iterator = effective_start
 
         while day_iterator < end_date.date():
             if day_iterator.weekday() in self.recurrence:
+                # Check if this is today and if the task is feasible given current time
+                if day_iterator == current_datetime.date():
+                    if not self._is_task_feasible_today(current_datetime):
+                        logger.debug(
+                            f"Skipping task creation for today - task not feasible at current time {current_datetime.time()}"
+                        )
+                        day_iterator += timedelta(days=1)
+                        continue
+
                 task = Task(
                     content=self.content,
                     duration=self.duration,

@@ -2,6 +2,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Plus, XCircle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Task, TaskFormData } from "@/types/task";
+import { dateUtils, utcTimeToLocal } from "@/utils/dateUtils";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,6 @@ import type { RecurringEvent } from "@/types/recurringEvent";
 import { ScheduleWarning } from "@/components/common/ScheduleWarning";
 import TaskForm from "@/components/tasks/TaskForm";
 import TaskList from "@/components/tasks/TaskList";
-import { dateUtils } from "@/utils/dateUtils";
 import recurringEventService from "@/services/recurringEventService";
 import { useSchedule } from "@/hooks/useSchedule";
 import { useTasks } from "@/hooks/useTasks";
@@ -260,6 +260,17 @@ const TaskListPage = () => {
 
   // Convert RecurringEvent to a Task object for the TaskForm component
   const eventToTaskForm = (event: RecurringEvent): Task => {
+    // Convert UTC time window values to local times for form display
+    const baseDate = dateUtils.getNow();
+    const localTimeWindowStart = utcTimeToLocal(
+      event.time_window_start || null,
+      baseDate
+    );
+    const localTimeWindowEnd = utcTimeToLocal(
+      event.time_window_end || null,
+      baseDate
+    );
+
     return {
       id: event.id,
       content: event.content,
@@ -269,8 +280,8 @@ const TaskListPage = () => {
       updated_at: event.updated_at,
       task_type: "recurring",
       recurrence: event.recurrence,
-      time_window_start: event.time_window_start || undefined,
-      time_window_end: event.time_window_end || undefined,
+      time_window_start: localTimeWindowStart || undefined,
+      time_window_end: localTimeWindowEnd || undefined,
     } as Task;
   };
 

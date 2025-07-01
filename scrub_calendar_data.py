@@ -11,6 +11,7 @@ Usage: python scrub_calendar_data.py
 import json
 import os
 import random
+from datetime import datetime
 from pathlib import Path
 
 
@@ -156,6 +157,27 @@ def scrub_calendar_file(data):
     # Replace body with dummy body
     if "body" in scrubbed_data:
         scrubbed_data["body"] = generate_dummy_body()
+
+    # Ensure start and end dates are in Microsoft Outlook format (7-digit microseconds)
+    if "start" in scrubbed_data and scrubbed_data["start"]:
+        try:
+            # Remove timezone info for parsing
+            date_str = scrubbed_data["start"].replace("Z", "").split("+")[0]
+            dt = datetime.fromisoformat(date_str)
+            # Format with 7-digit microseconds
+            scrubbed_data["start"] = dt.strftime("%Y-%m-%dT%H:%M:%S.%f") + "000"
+        except Exception as e:
+            print(f"Warning: Could not reformat start date: {e}")
+
+    if "end" in scrubbed_data and scrubbed_data["end"]:
+        try:
+            # Remove timezone info for parsing
+            date_str = scrubbed_data["end"].replace("Z", "").split("+")[0]
+            dt = datetime.fromisoformat(date_str)
+            # Format with 7-digit microseconds
+            scrubbed_data["end"] = dt.strftime("%Y-%m-%dT%H:%M:%S.%f") + "000"
+        except Exception as e:
+            print(f"Warning: Could not reformat end date: {e}")
 
     return scrubbed_data
 
