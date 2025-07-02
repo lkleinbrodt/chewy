@@ -50,9 +50,8 @@ def get_task_dependency_ids(task):
 def _format_task_display_name(task: Task) -> str:
     """Format task name for display, including instance date for recurring tasks."""
     if task.recurring_event_id and task.instance_date:
-        # For recurring tasks, include the specific date
-        date_str = task.instance_date.strftime("%A, %B %d")
-        return f"{task.content} ({date_str})"
+        # For recurring tasks, just include the content - let frontend handle date formatting
+        return task.content
     return task.content
 
 

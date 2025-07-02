@@ -106,11 +106,9 @@ class RecurringEvent(db.Model):
         n_tasks_created = 0
 
         # Get current datetime to check both date and time feasibility
-        # Use UTC consistently to avoid timezone issues
         current_datetime = datetime.utcnow()
 
         # Start from the later of start_date or today
-        # Ensure we're comparing dates in the same timezone
         effective_start = max(start_date.date(), current_datetime.date())
         day_iterator = effective_start
 
