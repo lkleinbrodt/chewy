@@ -24,12 +24,22 @@ const scheduleService = {
     try {
       const objectives = settingsService.getObjectives();
 
-      // Use start of today to avoid timezone issues and past dates
+      // Use start of today in UTC to avoid timezone issues
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const todayUTC = new Date(
+        Date.UTC(
+          today.getFullYear(),
+          today.getMonth(),
+          today.getDate(),
+          0,
+          0,
+          0,
+          0
+        )
+      );
 
       const response = await axiosInstance.post("/schedule/generate", {
-        start_date: today.toISOString(),
+        start_date: todayUTC.toISOString(),
         end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
         objectives, // Include objectives from settings
       });
